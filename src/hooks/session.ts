@@ -2,6 +2,7 @@
  * Session lifecycle hooks.
  *
  * Handles session.created and session.idle events.
+ * These events are received via the `event` catch-all handler (not direct hook keys).
  * Manages Opik Trace creation/finalization and multiagent parent/child linking.
  */
 
@@ -11,6 +12,7 @@ import type {
   SessionIdlePayload,
   ExporterMetrics,
 } from "../types.js"
+import { zeroTokenUsage, totalTokens } from "../types.js"
 import { SPAN_TYPE } from "../constants.js"
 import { safe } from "../helpers.js"
 
@@ -38,11 +40,12 @@ export const onSessionCreated = safe(function onSessionCreated(
   if (!info.parentID) {
     // ── Root session → new Trace ──────────────────────────────────────
     const trace = opikClient.trace({
-      name: `opencode-${info.title ?? info.slug ?? sessionID}`,
+      name: `opencode-${info.title ?? sessionID}`,
       input: {},
       metadata: {
         sessionID,
-        slug: info.slug,
+        projectID: info.projectID,
+        directory: info.directory,
         source: "opik-opencode",
       },
       projectName,
@@ -56,8 +59,9 @@ export const onSessionCreated = safe(function onSessionCreated(
       subagentSpans: new Map(),
       startedAt: Date.now(),
       lastActiveAt: Date.now(),
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      metadata: { sessionID, slug: info.slug },
+      usage: zeroTokenUsage(),
+      metadata: { sessionID, directory: info.directory },
+      streamingText: "",
     })
 
     metrics.tracesCreated++
@@ -75,12 +79,11 @@ export const onSessionCreated = safe(function onSessionCreated(
     const anchorSpan = parentActive.parentSpan ?? parentActive.trace
 
     const subagentSpan = anchorSpan.span({
-      name: `subagent:${info.title ?? info.slug ?? sessionID}`,
+      name: `subagent:${info.title ?? sessionID}`,
       type: SPAN_TYPE.AGENT,
       metadata: {
         childSessionID: sessionID,
         parentSessionID: info.parentID,
-        slug: info.slug,
       },
     })
 
@@ -93,12 +96,12 @@ export const onSessionCreated = safe(function onSessionCreated(
       subagentSpans: new Map(),
       startedAt: Date.now(),
       lastActiveAt: Date.now(),
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      usage: zeroTokenUsage(),
       metadata: {
         sessionID,
         parentSessionID: info.parentID,
-        slug: info.slug,
       },
+      streamingText: "",
     })
 
     // Parent tracks its children
@@ -138,7 +141,10 @@ export const onSessionIdle = safe(function onSessionIdle(
         // ── Child session: close subagent span only ───────────────────
         active.parentSpan.update({
           output: active.lastOutput ? { response: active.lastOutput } : {},
-          metadata: { usage: active.usage },
+          metadata: {
+            usage: active.usage,
+            totalTokens: totalTokens(active.usage),
+          },
         })
         active.parentSpan.end()
         metrics.spansClosed++
@@ -150,6 +156,7 @@ export const onSessionIdle = safe(function onSessionIdle(
           output: active.lastOutput ? { response: active.lastOutput } : {},
           metadata: {
             usage: active.usage,
+            totalTokens: totalTokens(active.usage),
             ...active.metadata,
           },
         })

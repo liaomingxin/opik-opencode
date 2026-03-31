@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { onLlmInput, onLlmOutput, type LlmHookDeps } from "../llm.js"
+import { onLlmInput, onLlmOutput, onMessagePartUpdated, type LlmHookDeps } from "../llm.js"
 import type { ActiveTrace, ExporterMetrics } from "../../types.js"
 import { createInitialMetrics } from "../../types.js"
 
@@ -32,7 +32,8 @@ function createMockActiveTrace(overrides?: Partial<ActiveTrace>): ActiveTrace {
     startedAt: Date.now(),
     lastActiveAt: Date.now(),
     lastOutput: undefined,
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    usage: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    streamingText: "",
     metadata: {},
     ...overrides,
   }
@@ -58,9 +59,9 @@ describe("onLlmInput", () => {
     onLlmInput(
       {
         sessionID: "session-1",
-        content: "Hello world",
-        model: "claude-4",
-        provider: "anthropic",
+        model: { providerID: "anthropic", modelID: "claude-4" },
+        message: { content: "Hello world" },
+        parts: [],
       },
       deps,
     )
@@ -77,7 +78,7 @@ describe("onLlmInput", () => {
 
   it("should do nothing if no active trace exists", () => {
     onLlmInput(
-      { sessionID: "unknown", content: "Hello" },
+      { sessionID: "unknown", message: { content: "Hello" } },
       deps,
     )
     expect(metrics.spansCreated).toBe(0)
@@ -89,7 +90,7 @@ describe("onLlmInput", () => {
     deps.activeTraces.set("child-1", active)
 
     onLlmInput(
-      { sessionID: "child-1", content: "Hello from child" },
+      { sessionID: "child-1", message: { content: "Hello from child" } },
       deps,
     )
 
@@ -120,8 +121,10 @@ describe("onLlmOutput", () => {
       {
         sessionID: "session-1",
         content: "Response text",
-        model: "claude-4",
-        tokens: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        modelID: "claude-4",
+        providerID: "anthropic",
+        messageID: "msg-1",
+        tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
       },
       deps,
     )
@@ -129,9 +132,49 @@ describe("onLlmOutput", () => {
     expect(currentSpan.update).toHaveBeenCalled()
     expect(currentSpan.end).toHaveBeenCalled()
     expect(active.currentSpan).toBeNull()
-    expect(active.usage.inputTokens).toBe(100)
-    expect(active.usage.outputTokens).toBe(50)
+    expect(active.usage.input).toBe(100)
+    expect(active.usage.output).toBe(50)
     expect(active.lastOutput).toBe("Response text")
     expect(metrics.spansClosed).toBe(1)
+  })
+})
+
+describe("onMessagePartUpdated", () => {
+  let deps: LlmHookDeps
+  let metrics: ExporterMetrics
+
+  beforeEach(() => {
+    metrics = createInitialMetrics()
+    deps = {
+      activeTraces: new Map(),
+      metrics,
+      sanitize: false,
+    }
+  })
+
+  it("should accumulate deltas into streamingText", () => {
+    const currentSpan = createMockSpan()
+    const active = createMockActiveTrace({ currentSpan })
+    deps.activeTraces.set("session-1", active)
+
+    onMessagePartUpdated(
+      { sessionID: "session-1", part: { type: "text", text: "Hello" }, delta: "Hello" },
+      deps,
+    )
+    onMessagePartUpdated(
+      { sessionID: "session-1", part: { type: "text", text: "Hello world" }, delta: " world" },
+      deps,
+    )
+
+    expect(active.streamingText).toBe("Hello world")
+  })
+
+  it("should do nothing if no active trace exists", () => {
+    onMessagePartUpdated(
+      { sessionID: "unknown", part: { type: "text" }, delta: "Hello" },
+      deps,
+    )
+    // No error thrown, metrics unchanged
+    expect(metrics.spansCreated).toBe(0)
   })
 })

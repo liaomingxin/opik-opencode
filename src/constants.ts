@@ -21,10 +21,15 @@ export const SPAN_TYPE = {
 
 /** OpenCode event names we subscribe to */
 export const OPENCODE_EVENTS = {
+  // Events only accessible via the `event` catch-all handler
   SESSION_CREATED: "session.created",
+  SESSION_UPDATED: "session.updated",
   SESSION_IDLE: "session.idle",
-  CHAT_MESSAGE: "chat.message",
+  SESSION_STATUS: "session.status",
   MESSAGE_UPDATED: "message.updated",
+  MESSAGE_PART_UPDATED: "message.part.updated",
+  // Direct hook keys in the Hooks interface
+  CHAT_MESSAGE: "chat.message",
   TOOL_EXECUTE_BEFORE: "tool.execute.before",
   TOOL_EXECUTE_AFTER: "tool.execute.after",
 } as const

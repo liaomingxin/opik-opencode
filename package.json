@@ -6,6 +6,9 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "opik-opencode": "./dist/configure-cli.js"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -29,6 +32,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "@clack/prompts": "^1.1.0",
     "opik": "^1.0.0",
     "zod": "^3.24.0"
   },

@@ -1,8 +1,10 @@
 /**
  * Core type definitions for the opik-opencode plugin.
  *
- * Mirrors the architecture of opik-openclaw but adapted for OpenCode's
- * session/parentID-based multiagent model.
+ * Adapted from OpenCode @opencode-ai/plugin@1.3.10 real API types.
+ * Session lifecycle events (session.created, session.idle, message.updated,
+ * message.part.updated) are accessed via the `event` catch-all hook, NOT
+ * as direct hook keys.
  */
 
 import type { Opik } from "opik"
@@ -34,6 +36,25 @@ export interface OpikPluginConfig {
   uploadAttachments?: boolean
 }
 
+// ─── Token Usage (matches AssistantMessage.tokens from OpenCode SDK) ────────
+
+export interface TokenUsage {
+  input: number
+  output: number
+  reasoning: number
+  cache: { read: number; write: number }
+}
+
+/** Create a zero-valued TokenUsage */
+export function zeroTokenUsage(): TokenUsage {
+  return { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+}
+
+/** Compute total tokens from the TokenUsage shape */
+export function totalTokens(t: TokenUsage): number {
+  return t.input + t.output + t.reasoning + t.cache.read + t.cache.write
+}
+
 // ─── Active Trace State ──────────────────────────────────────────────────────
 
 export interface ActiveTrace {
@@ -57,51 +78,86 @@ export interface ActiveTrace {
   usage: TokenUsage
   /** Session metadata */
   metadata: Record<string, unknown>
-}
-
-export interface TokenUsage {
-  inputTokens: number
-  outputTokens: number
-  totalTokens: number
+  /** Accumulated streaming text from message.part.updated deltas */
+  streamingText: string
+  /** Model info captured from chat.message for span metadata */
+  modelInfo?: { providerID: string; modelID: string }
 }
 
 // ─── Hook Event Payloads ─────────────────────────────────────────────────────
 
 /**
- * Mapped OpenCode events → openclaw equivalents:
+ * Mapped OpenCode events → hook mechanism:
  *
- * | OpenCode Event        | openclaw Equivalent   |
- * |-----------------------|-----------------------|
- * | session.created       | (trace creation)      |
- * | chat.message          | llm_input             |
- * | message.updated       | llm_output            |
- * | tool.execute.before   | before_tool_call      |
- * | tool.execute.after    | after_tool_call       |
- * | session.idle          | agent_end             |
+ * | OpenCode Event          | Hook Type          | Source                           |
+ * |-------------------------|--------------------|----------------------------------|
+ * | session.created         | event catch-all    | EventSessionCreated              |
+ * | session.idle            | event catch-all    | EventSessionIdle                 |
+ * | session.status          | event catch-all    | EventSessionStatus               |
+ * | message.updated         | event catch-all    | EventMessageUpdated              |
+ * | message.part.updated    | event catch-all    | EventMessagePartUpdated          |
+ * | chat.message            | direct hook key    | Hooks["chat.message"]            |
+ * | tool.execute.before     | direct hook key    | Hooks["tool.execute.before"]     |
+ * | tool.execute.after      | direct hook key    | Hooks["tool.execute.after"]      |
  */
 
+/** Payload for session.created — derived from EventSessionCreated.properties.info (Session) */
 export interface SessionCreatedPayload {
   sessionID: string
   info: {
+    id: string
+    projectID?: string
+    directory?: string
     parentID?: string
     title?: string
-    slug?: string
+    version?: number
+    time?: { created?: number; updated?: number }
   }
 }
 
+/**
+ * Payload for chat.message — derived from Hooks["chat.message"] signature.
+ * hook: (input: {sessionID, agent?, model?}, output: {message: UserMessage, parts: Part[]})
+ */
 export interface LlmInputPayload {
   sessionID: string
-  content: string
-  model?: string
-  provider?: string
-  systemPrompt?: string
+  agent?: string
+  model?: { providerID: string; modelID: string }
+  messageID?: string
+  message?: unknown    // UserMessage from output.message
+  parts?: unknown[]    // Part[] from output.parts
 }
 
+/**
+ * Payload for message.updated — derived from EventMessageUpdated.properties.info (AssistantMessage).
+ */
 export interface LlmOutputPayload {
   sessionID: string
-  content: string
-  model?: string
+  messageID?: string
+  role?: string
+  modelID?: string
+  providerID?: string
+  content?: string       // extracted from message for convenience
   tokens?: TokenUsage
+  error?: unknown
+  finish?: string
+}
+
+/** Payload for message.part.updated — streaming deltas */
+export interface MessagePartUpdatedPayload {
+  sessionID: string
+  part: {
+    type: string
+    text?: string
+    [key: string]: unknown
+  }
+  delta?: string
+}
+
+/** Payload for session.status — busy/idle/retry transitions */
+export interface SessionStatusPayload {
+  sessionID: string
+  status: { type: string; attempt?: number; message?: string; next?: number }
 }
 
 export interface ToolBeforePayload {
@@ -111,13 +167,15 @@ export interface ToolBeforePayload {
   args: Record<string, unknown>
 }
 
+/** Payload for tool.execute.after — matches Hooks["tool.execute.after"] output */
 export interface ToolAfterPayload {
   tool: string
   sessionID: string
   callID: string
-  output: unknown
-  error?: string
-  metadata?: Record<string, unknown>
+  args?: Record<string, unknown>  // input.args available in after
+  title?: string                  // output.title
+  output: unknown                 // output.output (string)
+  metadata?: Record<string, unknown>  // output.metadata
 }
 
 export interface SessionIdlePayload {

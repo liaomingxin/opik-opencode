@@ -32,8 +32,9 @@ function createMockActiveTrace(overrides?: Partial<ActiveTrace>): ActiveTrace {
     startedAt: Date.now(),
     lastActiveAt: Date.now(),
     lastOutput: undefined,
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    usage: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     metadata: {},
+    streamingText: "",
     ...overrides,
   }
 }
@@ -117,6 +118,8 @@ describe("onToolAfter", () => {
         tool: "bash",
         sessionID: "session-1",
         callID: "call-1",
+        args: { command: "ls" },
+        title: "bash",
         output: "file1.txt\nfile2.txt",
       },
       deps,
@@ -128,26 +131,25 @@ describe("onToolAfter", () => {
     expect(metrics.spansClosed).toBe(1)
   })
 
-  it("should record error in tool span metadata", () => {
+  it("should store output as result even when empty", () => {
     const toolSpan = createMockSpan()
     const active = createMockActiveTrace()
-    active.toolSpans.set("call-err", toolSpan)
+    active.toolSpans.set("call-empty", toolSpan)
     deps.activeTraces.set("session-1", active)
 
     onToolAfter(
       {
         tool: "bash",
         sessionID: "session-1",
-        callID: "call-err",
-        output: null,
-        error: "command not found",
+        callID: "call-empty",
+        output: "",
       },
       deps,
     )
 
     expect(toolSpan.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        output: { error: "command not found" },
+        output: { result: "" },
       }),
     )
   })

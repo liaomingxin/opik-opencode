@@ -1,6 +1,7 @@
 /**
  * Tool execution hooks — handle tool.execute.before and tool.execute.after.
  *
+ * These are direct hook keys in the Hooks interface.
  * Maps to openclaw's before_tool_call / after_tool_call events.
  */
 
@@ -97,12 +98,18 @@ export const onToolBefore = safe(function onToolBefore(
 
 /**
  * Handle tool.execute.after — update and close the Tool Span.
+ *
+ * Real hook signature:
+ *   (input: {tool, sessionID, callID, args},
+ *    output: {title, output: string, metadata})
+ *
+ * Note: there is no `error` field in the real API output.
  */
 export const onToolAfter = safe(function onToolAfter(
   payload: ToolAfterPayload,
   deps: ToolHookDeps,
 ): void {
-  const { tool, sessionID, callID, output, error, metadata } = payload
+  const { tool, sessionID, callID, title, output, metadata } = payload
   const { activeTraces, metrics, sanitize } = deps
 
   const active = resolveActiveTrace(sessionID, activeTraces)
@@ -119,11 +126,11 @@ export const onToolAfter = safe(function onToolAfter(
   const outputData = sanitize ? sanitizePayload(output) : output
 
   span.update({
-    output: error ? { error } : { result: outputData },
+    output: { result: outputData },
     metadata: {
       ...metadata,
       toolName: tool,
-      ...(error ? { error: true } : {}),
+      ...(title ? { title } : {}),
     },
   })
 
