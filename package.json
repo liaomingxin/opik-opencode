@@ -7,7 +7,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "opik-opencode": "./dist/configure-cli.js"
+    "opik-opencode": "./dist/src/configure-cli.js"
   },
   "exports": {
     ".": {
