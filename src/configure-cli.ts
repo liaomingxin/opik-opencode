@@ -4,9 +4,9 @@
  * CLI entry point for the opik-opencode configuration tool.
  *
  * Usage:
- *   npx @opik/opik-opencode configure   — Interactive setup wizard
- *   npx @opik/opik-opencode status      — Show current config
- *   npx @opik/opik-opencode help        — Show usage
+ *   npx @liaomx/opik-opencode configure   — Interactive setup wizard
+ *   npx @liaomx/opik-opencode status      — Show current config
+ *   npx @liaomx/opik-opencode help        — Show usage
  *
  * Locates the nearest opencode.json config file, provides read/write
  * deps, and delegates to the configure wizard or status display.
@@ -94,7 +94,7 @@ async function main(): Promise<void> {
       break
 
     default:
-      console.log("@opik/opik-opencode — Opik trace export for OpenCode\n")
+      console.log("@liaomx/opik-opencode — Opik trace export for OpenCode\n")
       console.log("Usage: opik-opencode <command>\n")
       console.log("Commands:")
       console.log("  configure  Interactive setup for Opik trace export")

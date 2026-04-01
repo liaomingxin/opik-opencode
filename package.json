@@ -1,5 +1,5 @@
 {
-  "name": "@opik/opik-opencode",
+  "name": "@liaomx/opik-opencode",
   "version": "0.1.0",
   "description": "OpenCode plugin for Opik observability - traces LLM/Tool/Subagent execution to Opik platform",
   "license": "Apache-2.0",
@@ -18,7 +18,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -28,8 +29,10 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "lint": "eslint src/ --ext .ts",
     "typecheck": "tsc --noEmit",
+    "test:all": "vitest run && vitest run --config vitest.e2e.config.ts",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run build"
+    "prepack": "npm run clean && npm run build",
+    "prepublishOnly": "npm run typecheck && npm run test:all && npm run build"
   },
   "dependencies": {
     "@clack/prompts": "^1.1.0",
@@ -53,7 +56,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/comet-ml/opik-opencode"
+    "url": "https://github.com/liaomingxin/opik-opencode.git"
+  },
+  "homepage": "https://github.com/liaomingxin/opik-opencode#readme",
+  "bugs": {
+    "url": "https://github.com/liaomingxin/opik-opencode/issues"
   },
   "keywords": [
     "opencode",

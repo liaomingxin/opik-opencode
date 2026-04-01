@@ -34,7 +34,7 @@ const DEFAULT_LOCAL_URL = "http://localhost:5173/"
 /** Max URL validation retries (matches SDK's MAX_URL_VALIDATION_RETRIES). */
 const MAX_URL_RETRIES = 3
 /** Plugin identifier in opencode.json plugin array. */
-export const OPIK_PLUGIN_ID = "@opik/opik-opencode"
+export const OPIK_PLUGIN_ID = "@liaomx/opik-opencode"
 
 // ─── Utility ────────────────────────────────────────────────────────────────
 
@@ -76,8 +76,8 @@ export function getOpikPluginEntry(cfg: Record<string, unknown>): {
  * Write Opik plugin options into an opencode.json config object.
  * Creates or updates the plugin entry in the `plugin` array.
  *
- * When options is empty, stores as bare string `"@opik/opik-opencode"`.
- * Otherwise stores as tuple `["@opik/opik-opencode", { ...options }]`.
+ * When options is empty, stores as bare string `"@liaomx/opik-opencode"`.
+ * Otherwise stores as tuple `["@liaomx/opik-opencode", { ...options }]`.
  */
 export function setOpikPluginEntry(
   cfg: Record<string, unknown>,
@@ -484,7 +484,7 @@ export function showOpikStatus(deps: ConfigDeps): void {
 
   if (!entry.found) {
     console.log(
-      "Opik is not configured. Run: npx @opik/opik-opencode configure",
+      "Opik is not configured. Run: npx @liaomx/opik-opencode configure",
     )
     return
   }

@@ -1,5 +1,5 @@
 /**
- * @opik/opik-opencode — OpenCode plugin for Opik observability.
+ * @liaomx/opik-opencode — OpenCode plugin for Opik observability.
  *
  * Traces LLM calls, tool executions, and multiagent (parent/child session)
  * lifecycles to the Opik platform for monitoring and evaluation.
@@ -19,7 +19,7 @@
  *
  * Usage:
  *   1. Local plugin:  place in .opencode/plugins/ or reference in opencode.json
- *   2. npm plugin:    add "@opik/opik-opencode" to opencode.json plugins array
+ *   2. npm plugin:    add "@liaomx/opik-opencode" to opencode.json plugins array
  *
  * Configuration (env vars or opencode.json):
  *   OPIK_API_KEY        — Opik API key

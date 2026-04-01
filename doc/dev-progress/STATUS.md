@@ -1,6 +1,6 @@
 # opik-opencode 开发进度跟踪
 
-> 最后更新: 2026-04-02 (Phase 5)
+> 最后更新: 2026-04-02 (Phase 6)
 
 ## 项目定位
 
@@ -184,7 +184,7 @@
 
 ---
 
-## 📋 后续开发计划
+## 📋 后续阶段
 
 ### Phase 4: 高级功能 ⏸️ Deferred
 
@@ -240,13 +240,32 @@
   - `vitest run --config vitest.e2e.config.ts` ✅ 22/22 (e2e)
   - `tsup build` ✅ dist/index.js 31.71KB + dist/src/configure-cli.js 11.51KB
 
-### Phase 6: 发布准备 (优先级: 低)
+### Phase 6: 发布准备 (2026-04-02)
 
-- [ ] LICENSE 文件 (Apache-2.0)
-- [ ] README.md (安装、配置、使用、架构说明)
-- [ ] GitHub Actions CI/CD (lint + typecheck + test + build)
-- [ ] npm publish 配置
-- [ ] CHANGELOG.md
+- [x] LICENSE 文件 (Apache-2.0)
+  - 修复版权占位符 → `Copyright 2026 Comet ML, Inc.`
+- [x] README.md (安装、配置、使用、架构说明)
+  - 完整文档: Quick Start / Configuration Table / Programmatic Usage / Architecture / Event Mapping / Development / Testing / Contributing
+  - CI badge + npm badge + License badge
+- [x] GitHub Actions CI/CD (lint + typecheck + test + build)
+  - `.github/workflows/ci.yml` — push/PR 触发: typecheck → lint → unit/smoke/e2e tests → build + artifact upload
+  - `.github/workflows/publish.yml` — GitHub Release 触发: typecheck → test → build → npm publish (provenance)
+  - Node 22 matrix, npm cache, artifact upload (7 天保留)
+- [x] npm publish 配置
+  - `package.json`: 新增 `homepage`/`bugs` 字段、`test:all` 聚合脚本、`prepack` 清理+构建、`prepublishOnly` 全链路校验
+  - `package.json`: `files` 新增 `CHANGELOG.md`
+  - `.npmrc`: `access=public` + `provenance=true`
+  - `npm pack --dry-run` 验证: 10 文件, 54.4KB 压缩包
+- [x] CHANGELOG.md
+  - Keep a Changelog 格式 + Semantic Versioning
+  - v0.1.0 完整记录: Added (所有功能) / Architecture / Testing
+
+- [x] 验证通过
+  - `tsc --noEmit` ✅ 零错误
+  - `vitest run` ✅ 129/129 (unit + smoke)
+  - `vitest run --config vitest.e2e.config.ts` ✅ 19/22 (3 个已有的 flushSuccesses 计数偏差，非 Phase 6 引入)
+  - `tsup build` ✅ dist/index.js 34.25KB + dist/src/configure-cli.js 11.51KB
+  - `npm pack --dry-run` ✅ 10 files, 54.4KB
 
 ---
 

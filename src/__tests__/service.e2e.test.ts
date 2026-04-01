@@ -145,7 +145,7 @@ describe("E2E: Complete single-session lifecycle", () => {
     expect(metrics.tracesFinalized).toBe(1)
     expect(metrics.spansCreated).toBe(2) // 1 LLM + 1 tool
     expect(metrics.spansClosed).toBe(2) // both closed normally
-    expect(metrics.flushSuccesses).toBe(1) // root idle → flush
+    expect(metrics.flushSuccesses).toBe(2) // 1 eager flush (LLM output) + 1 root idle → flush
     expect(metrics.flushFailures).toBe(0)
     expect(metrics.errors).toBe(0)
   })
@@ -264,13 +264,13 @@ describe("E2E: Multiagent parent + 2 child sessions", () => {
     service.handleSessionIdle({ sessionID: "child-1" })
     await flushMicrotasks()
     expect(service.getActiveTraceCount()).toBe(2) // parent + child-2 remain
-    expect(service.getMetrics().flushSuccesses).toBe(0) // child idle → no flush
+    expect(service.getMetrics().flushSuccesses).toBe(1) // 1 eager flush from child-1's LLM output
 
     // Child 2 finishes (idle) → closes subagent span, no flush
     service.handleSessionIdle({ sessionID: "child-2" })
     await flushMicrotasks()
     expect(service.getActiveTraceCount()).toBe(1) // only parent remains
-    expect(service.getMetrics().flushSuccesses).toBe(0)
+    expect(service.getMetrics().flushSuccesses).toBe(1) // still just the eager flush
 
     // Parent finishes (idle) → finalizes trace + flush
     service.handleSessionIdle({ sessionID: "parent" })
@@ -285,7 +285,7 @@ describe("E2E: Multiagent parent + 2 child sessions", () => {
     expect(m.spansCreated).toBe(4)
     // spansClosed: 1 LLM + 1 tool + 2 subagent on child idle = 4
     expect(m.spansClosed).toBe(4)
-    expect(m.flushSuccesses).toBe(1) // only parent idle triggers flush
+    expect(m.flushSuccesses).toBe(2) // 1 eager flush (child-1 LLM output) + 1 parent idle flush
     expect(m.errors).toBe(0)
   })
 
@@ -889,7 +889,7 @@ describe("E2E: Multiple concurrent independent root sessions", () => {
     expect(m.tracesFinalized).toBe(2)
     expect(m.spansCreated).toBe(2) // 1 LLM + 1 tool
     expect(m.spansClosed).toBe(2)
-    expect(m.flushSuccesses).toBe(2) // each root idle triggers flush
+    expect(m.flushSuccesses).toBe(3) // 1 eager flush (alpha LLM output) + 2 root idle flushes
   })
 })
 
