@@ -140,10 +140,12 @@ describe("onSessionCreated", () => {
     expect(parentTrace.span).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "subagent:Child Agent",
-        type: "agent",
+        type: "general",
+        startTime: expect.any(Date),
         metadata: expect.objectContaining({
           childSessionID: "child-1",
           parentSessionID: "parent-1",
+          spanRole: "agent",
         }),
       }),
     )
@@ -186,7 +188,8 @@ describe("onSessionCreated", () => {
     expect(parentSubagentSpan.span).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "subagent:Grandchild Agent",
-        type: "agent",
+        type: "general",
+        startTime: expect.any(Date),
       }),
     )
     expect(rootTrace.span).not.toHaveBeenCalled()
@@ -231,7 +234,9 @@ describe("onSessionCreated", () => {
     expect(deps.subagentSpanHosts.has("child-bridge")).toBe(true)
     const host = deps.subagentSpanHosts.get("child-bridge")!
     expect(host.hostSessionID).toBe("parent-1")
-    expect(host.active).toBe(parentActive)
+    // After the fix, subagentSpanHosts stores the CHILD's ActiveTrace (not parent's)
+    const childActive = deps.activeTraces.get("child-bridge")!
+    expect(host.active).toBe(childActive)
   })
 
   it("should initialize ActiveTrace with correct default values", () => {
