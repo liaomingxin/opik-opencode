@@ -48,14 +48,10 @@ export function safe<T extends (...args: any[]) => any>(
       const result = fn(...args)
       // Handle async functions
       if (result && typeof result.catch === "function") {
-        return result.catch((err: unknown) => {
-          console.error(`[opik-opencode] ${label} error:`, err)
-          return undefined
-        })
+        return result.catch(() => undefined)
       }
       return result
-    } catch (err) {
-      console.error(`[opik-opencode] ${label} error:`, err)
+    } catch {
       return undefined
     }
   }) as any

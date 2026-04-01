@@ -33,6 +33,7 @@ const mockOpikConstructor = vi.fn().mockImplementation(() => ({
 
 vi.mock("opik", () => ({
   Opik: mockOpikConstructor,
+  disableLogger: vi.fn(),
 }))
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

@@ -73,12 +73,7 @@ export const onSessionCreated = safe(function onSessionCreated(
   } else {
     // ── Child session → Subagent Span on parent Trace ─────────────────
     const parentActive = activeTraces.get(info.parentID)
-    if (!parentActive) {
-      console.warn(
-        `[opik-opencode] Child session ${sessionID} has parentID ${info.parentID} but no active parent trace found.`,
-      )
-      return
-    }
+    if (!parentActive) return
 
     // Anchor: if parent is itself a child, nest under parent's subagent span
     const anchorSpan = parentActive.parentSpan ?? parentActive.trace
@@ -204,11 +199,7 @@ export const onSessionIdle = safe(function onSessionIdle(
         activeTraces.delete(sessionID)
         await onFlush()
       }
-    } catch (err) {
-      console.error(
-        `[opik-opencode] Error finalizing session ${sessionID}:`,
-        err,
-      )
+    } catch {
       metrics.errors++
     }
   })

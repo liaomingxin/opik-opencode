@@ -195,11 +195,7 @@ describe("onSessionCreated", () => {
     expect(rootTrace.span).not.toHaveBeenCalled()
   })
 
-  it("should warn and return when parentID has no matching active trace", () => {
-    const consoleSpy = vi
-      .spyOn(console, "warn")
-      .mockImplementation(() => {})
-
+  it("should silently return when parentID has no matching active trace", () => {
     onSessionCreated(
       {
         sessionID: "orphan-1",
@@ -208,14 +204,9 @@ describe("onSessionCreated", () => {
       deps,
     )
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining("no active parent trace found"),
-    )
     expect(deps.activeTraces.has("orphan-1")).toBe(false)
     expect(metrics.tracesCreated).toBe(0)
     expect(metrics.spansCreated).toBe(0)
-
-    consoleSpy.mockRestore()
   })
 
   it("should register child session in subagentSpanHosts bridge", () => {

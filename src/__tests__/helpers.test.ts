@@ -115,32 +115,18 @@ describe("safe", () => {
     const fn = () => {
       throw new Error("sync boom")
     }
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
     const wrapped = safe(fn, "syncFail")
-
     const result = wrapped()
     expect(result).toBeUndefined()
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "[opik-opencode] syncFail error:",
-      expect.any(Error),
-    )
-    consoleSpy.mockRestore()
   })
 
   it("should catch async errors and return undefined", async () => {
     const fn = async () => {
       throw new Error("async boom")
     }
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
     const wrapped = safe(fn, "asyncFail")
-
     const result = await wrapped()
     expect(result).toBeUndefined()
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "[opik-opencode] asyncFail error:",
-      expect.any(Error),
-    )
-    consoleSpy.mockRestore()
   })
 
   it("should resolve async functions correctly on success", async () => {

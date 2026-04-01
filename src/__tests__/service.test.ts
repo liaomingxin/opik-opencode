@@ -32,6 +32,7 @@ vi.mock("opik", () => ({
     trace: mockOpikTrace,
     flush: mockFlush,
   })),
+  disableLogger: vi.fn(),
 }))
 
 // ─── Service lifecycle ──────────────────────────────────────────────────────

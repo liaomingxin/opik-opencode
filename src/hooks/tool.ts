@@ -123,12 +123,7 @@ export const onToolAfter = safe(function onToolAfter(
   const { active } = resolved
 
   const span = active.toolSpans.get(callID)
-  if (!span) {
-    console.warn(
-      `[opik-opencode] No tool span found for callID=${callID} tool=${tool}`,
-    )
-    return
-  }
+  if (!span) return
 
   const outputData = sanitize ? sanitizePayload(output) : output
 

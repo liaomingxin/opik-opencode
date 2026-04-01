@@ -8,7 +8,7 @@
  * - Expired trace auto-cleanup
  */
 
-import { Opik } from "opik"
+import { Opik, disableLogger } from "opik"
 import type {
   OpikPluginConfig,
   ActiveTrace,
@@ -58,6 +58,10 @@ export class OpikService {
     if (this.config.projectName)
       clientOptions.projectName = this.config.projectName
 
+    // Suppress Opik SDK internal INFO/WARN logs that would leak into
+    // OpenCode's TUI via stderr.
+    disableLogger()
+
     this.client = new Opik(clientOptions)
 
     // Start expired trace cleanup timer
@@ -67,9 +71,6 @@ export class OpikService {
     )
 
     this.started = true
-    console.log(
-      `[opik-opencode] Started. Project: ${this.config.projectName}`,
-    )
   }
 
   /**
@@ -94,11 +95,8 @@ export class OpikService {
         } else {
           active.trace.end()
         }
-      } catch (err) {
-        console.error(
-          `[opik-opencode] Error closing trace for session ${sessionID}:`,
-          err,
-        )
+      } catch {
+        // best-effort: silently ignore close errors
       }
     }
 
@@ -107,7 +105,6 @@ export class OpikService {
     this.activeTraces.clear()
     this.subagentSpanHosts.clear()
     this.started = false
-    console.log("[opik-opencode] Stopped.")
   }
 
   // ─── Event Handlers (delegated to hook modules) ─────────────────────────
@@ -207,15 +204,8 @@ export class OpikService {
             this.config.flushRetryBaseDelay,
             this.config.flushRetryMaxDelay,
           )
-          console.warn(
-            `[opik-opencode] Flush attempt ${attempt + 1} failed, retrying in ${Math.round(delay)}ms...`,
-          )
           await sleep(delay)
         } else {
-          console.error(
-            `[opik-opencode] Flush failed after ${this.config.flushRetries + 1} attempts:`,
-            err,
-          )
           this.metrics.flushFailures++
         }
       }
@@ -230,9 +220,6 @@ export class OpikService {
 
     for (const [sessionID, active] of this.activeTraces) {
       if (active.lastActiveAt < expireThreshold) {
-        console.warn(
-          `[opik-opencode] Expiring inactive trace for session ${sessionID}`,
-        )
         try {
           for (const span of active.toolSpans.values()) span.end()
           if (active.currentSpan) active.currentSpan.end()
@@ -247,11 +234,8 @@ export class OpikService {
             })
             active.trace.end()
           }
-        } catch (err) {
-          console.error(
-            `[opik-opencode] Error expiring trace ${sessionID}:`,
-            err,
-          )
+        } catch {
+          // best-effort
         }
         this.activeTraces.delete(sessionID)
         this.metrics.tracesExpired++
