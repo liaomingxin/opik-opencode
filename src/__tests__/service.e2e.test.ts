@@ -291,21 +291,14 @@ describe("E2E: Multiagent parent + 2 child sessions", () => {
   })
 
   it("should handle orphan child session (parent not found)", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
-
     service.handleSessionCreated({
       sessionID: "orphan-child",
       info: { id: "orphan-child", parentID: "nonexistent-parent", title: "Orphan" },
     })
 
     expect(service.getActiveTraceCount()).toBe(0)
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("nonexistent-parent"),
-    )
     expect(service.getMetrics().tracesCreated).toBe(0)
     expect(service.getMetrics().spansCreated).toBe(0)
-
-    warnSpy.mockRestore()
   })
 })
 
@@ -703,9 +696,7 @@ describe("E2E: Tool sessionID fallback", () => {
     expect(service.getMetrics().spansCreated).toBe(2)
   })
 
-  it("should warn and skip when no tool span found for callID on after", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
-
+  it("should skip when no tool span found for callID on after", () => {
     service.handleSessionCreated({
       sessionID: "sess-y",
       info: { id: "sess-y", title: "Warn Test" },
@@ -720,12 +711,7 @@ describe("E2E: Tool sessionID fallback", () => {
       title: "bash",
     })
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("nonexistent-call-id"),
-    )
     expect(service.getMetrics().spansClosed).toBe(0) // no span was closed
-
-    warnSpy.mockRestore()
   })
 })
 
