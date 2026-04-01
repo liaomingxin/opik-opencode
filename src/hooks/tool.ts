@@ -87,6 +87,7 @@ export const onToolBefore = safe(function onToolBefore(
   const toolSpan = anchor.span({
     name: `tool:${tool}`,
     type: SPAN_TYPE.TOOL,
+    startTime: new Date(),
     input: inputData,
     metadata: {
       toolName: tool,

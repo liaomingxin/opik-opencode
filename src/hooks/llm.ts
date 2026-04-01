@@ -90,6 +90,7 @@ export const onLlmInput = safe(function onLlmInput(
   const llmSpan = anchor.span({
     name: spanName,
     type: SPAN_TYPE.LLM,
+    startTime: new Date(),
     input: inputData,
     metadata: {
       sessionID,
@@ -99,11 +100,22 @@ export const onLlmInput = safe(function onLlmInput(
     },
   })
 
+  // Back-fill trace input with the user's first message so Opik Threads
+  // "First message" column and Trace Input field are populated.
+  // Only do this for the root session (no parentSpan) to avoid child sessions
+  // overwriting the root trace input with their own subagent prompts.
+  if (active.llmTurnCount === 1 && !active.parentSpan && userContent) {
+    try {
+      active.trace.update({ input: inputData })
+    } catch { /* best-effort */ }
+  }
+
   active.currentSpan = llmSpan
   active.modelInfo = model
     ? { providerID: model.providerID, modelID: model.modelID }
     : undefined
   active.streamingText = "" // reset for new LLM turn
+  active.currentTurnStartTime = undefined // reset: span already created with correct startTime
   active.lastActiveAt = Date.now()
   metrics.spansCreated++
 },
@@ -128,6 +140,7 @@ export const onLlmOutput = safe(function onLlmOutput(
 
   // If no currentSpan exists (chat.message only fires once, but message.updated
   // fires for each LLM turn including after tool-calls), create a new LLM span.
+  // Use currentTurnStartTime (recorded on first message.part.updated) for accurate timing.
   if (!active.currentSpan) {
     active.llmTurnCount += 1
     const fallbackModelName = modelID ?? active.modelInfo?.modelID ?? "llm"
@@ -138,6 +151,7 @@ export const onLlmOutput = safe(function onLlmOutput(
     active.currentSpan = anchor.span({
       name: fallbackSpanName,
       type: SPAN_TYPE.LLM,
+      startTime: active.currentTurnStartTime ?? new Date(),
       input: {},
       metadata: {
         sessionID,
@@ -145,6 +159,7 @@ export const onLlmOutput = safe(function onLlmOutput(
         providerID: providerID ?? active.modelInfo?.providerID,
       },
     })
+    active.currentTurnStartTime = undefined // consumed
     metrics.spansCreated++
   }
 
@@ -190,6 +205,7 @@ export const onLlmOutput = safe(function onLlmOutput(
 
   active.currentSpan = null
   active.streamingText = "" // reset after span closes
+  active.currentTurnStartTime = undefined // reset for next turn
   active.lastActiveAt = Date.now()
 },
 "onLlmOutput")
@@ -209,6 +225,12 @@ export const onMessagePartUpdated = safe(function onMessagePartUpdated(
   const container = resolveSessionSpanContainer(sessionID, activeTraces, subagentSpanHosts)
   if (!container) return
   const { active } = container
+
+  // Record the start time of this LLM turn on first part arrival.
+  // Used as fallback startTime when chat.message didn't fire (tool-call follow-up turns).
+  if (!active.currentSpan && !active.currentTurnStartTime) {
+    active.currentTurnStartTime = new Date()
+  }
 
   // OpenCode sends full part.text (not incremental deltas).
   // For type=text parts, replace streamingText with the latest full text.

@@ -52,6 +52,47 @@ function extractContentFromMessage(msg: any): string {
  * Configuration priority: explicit `config` param > opencode.json plugin
  * options (received as `pluginOptions`) > environment variables > defaults.
  */
+// ── Debug event logger ────────────────────────────────────────────────────────
+// Set OPIK_DEBUG=1 to enable full event timeline dump.
+// Writes directly to /tmp/opik-debug.log via fs.appendFileSync to bypass
+// OpenCode TUI's stderr capture.
+import { appendFileSync } from "fs"
+
+const DEBUG = process.env.OPIK_DEBUG === "1"
+const DEBUG_LOG_PATH = process.env.OPIK_DEBUG_LOG ?? "/tmp/opik-debug.log"
+let _debugSeq = 0
+
+function debugLog(direction: "event" | "hook", type: string, payload: unknown): void {
+  if (!DEBUG) return
+  const seq = ++_debugSeq
+  const ts = new Date().toISOString().slice(11, 23) // HH:MM:SS.mmm
+  const prefix = `[opik-debug] #${String(seq).padStart(3, "0")} ${ts} ${direction}:${type}`
+
+  let line: string
+  if (type === "message.part.updated") {
+    // High-volume — only print part type + text length to avoid noise
+    const p = (payload as any)
+    const partType = p?.part?.type ?? "?"
+    const textLen = typeof p?.part?.text === "string" ? p.part.text.length : "?"
+    line = `${prefix}  part.type=${partType} text.len=${textLen}\n`
+  } else {
+    let body: string
+    try {
+      body = JSON.stringify(payload, null, 2)
+      if (body.length > 1200) body = body.slice(0, 1200) + "\n  ... (truncated)"
+    } catch {
+      body = String(payload)
+    }
+    line = `${prefix}\n${body}\n`
+  }
+
+  try {
+    appendFileSync(DEBUG_LOG_PATH, line)
+  } catch {
+    // best-effort: if file write fails, silently ignore
+  }
+}
+
 export function createOpikPlugin(config?: Partial<OpikPluginConfig>): Plugin {
   return async (_ctx, pluginOptions) => {
     // Merge: explicit config > opencode.json plugin options > env vars > defaults
@@ -59,6 +100,10 @@ export function createOpikPlugin(config?: Partial<OpikPluginConfig>): Plugin {
     const mergedConfig = { ...optionsFromConfig, ...config }
     const service = new OpikService()
     await service.start(mergedConfig)
+
+    if (DEBUG) {
+      console.error("[opik-debug] Event timeline logging ENABLED (OPIK_DEBUG=1)")
+    }
 
     return {
       // ── Event catch-all handler ──────────────────────────────────────
@@ -69,6 +114,8 @@ export function createOpikPlugin(config?: Partial<OpikPluginConfig>): Plugin {
       event: async (input: { event: any }) => {
         const { event } = input ?? {}
         if (!event?.type) return
+
+        debugLog("event", event.type, event.properties)
 
         switch (event.type) {
           case "session.created":
@@ -187,6 +234,14 @@ export function createOpikPlugin(config?: Partial<OpikPluginConfig>): Plugin {
         },
         output: { message?: unknown; parts?: unknown[] },
       ) => {
+        debugLog("hook", "chat.message", {
+          sessionID: input.sessionID,
+          agent: input.agent,
+          modelID: input.model?.modelID,
+          messageID: input.messageID,
+          message: output?.message,
+          parts: output?.parts,
+        })
         // Lazy trace creation: if chat.message arrives before session.created/updated,
         // create a minimal trace so the LLM span has somewhere to anchor.
         if (input.sessionID && !service.hasActiveTrace(input.sessionID)) {
@@ -213,6 +268,11 @@ export function createOpikPlugin(config?: Partial<OpikPluginConfig>): Plugin {
         input: { tool: string; sessionID: string; callID: string },
         output: { args: Record<string, unknown> },
       ) => {
+        debugLog("hook", "tool.execute.before", {
+          tool: input.tool,
+          sessionID: input.sessionID,
+          callID: input.callID,
+        })
         service.handleToolBefore({
           tool: input.tool,
           sessionID: input.sessionID,
@@ -234,6 +294,13 @@ export function createOpikPlugin(config?: Partial<OpikPluginConfig>): Plugin {
           metadata?: Record<string, unknown>
         },
       ) => {
+        debugLog("hook", "tool.execute.after", {
+          tool: input.tool,
+          sessionID: input.sessionID,
+          callID: input.callID,
+          title: output?.title,
+          outputLen: typeof output?.output === "string" ? output.output.length : "?",
+        })
         service.handleToolAfter({
           tool: input.tool,
           sessionID: input.sessionID,

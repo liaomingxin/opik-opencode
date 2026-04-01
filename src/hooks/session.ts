@@ -65,6 +65,7 @@ export const onSessionCreated = safe(function onSessionCreated(
       usage: zeroTokenUsage(),
       metadata: { sessionID, directory: info.directory },
       streamingText: "",
+      currentTurnStartTime: undefined,
       llmTurnCount: 0,
     })
 
@@ -84,15 +85,17 @@ export const onSessionCreated = safe(function onSessionCreated(
 
     const subagentSpan = anchorSpan.span({
       name: `subagent:${info.title ?? sessionID}`,
-      type: SPAN_TYPE.AGENT,
+      type: SPAN_TYPE.GENERAL,
+      startTime: new Date(),
       metadata: {
         childSessionID: sessionID,
         parentSessionID: info.parentID,
+        spanRole: "agent",
       },
     })
 
     // Register child as its own ActiveTrace entry, sharing parent's root Trace
-    activeTraces.set(sessionID, {
+    const childActive: ActiveTrace = {
       trace: parentActive.trace, // shared root trace
       currentSpan: null,
       parentSpan: subagentSpan, // this child's anchor span
@@ -106,13 +109,18 @@ export const onSessionCreated = safe(function onSessionCreated(
         parentSessionID: info.parentID,
       },
       streamingText: "",
+      currentTurnStartTime: undefined,
       llmTurnCount: 0,
-    })
+    }
+    activeTraces.set(sessionID, childActive)
 
     // Parent tracks its children
     parentActive.subagentSpans.set(sessionID, subagentSpan)
 
     // Register cross-session bridge for event reordering resilience
+    // CRITICAL: store the CHILD's ActiveTrace, not the parent's.
+    // Otherwise all child events (LLM, tool) would share the parent's
+    // currentSpan / llmTurnCount / toolSpans — causing data corruption.
     if (subagentSpanHosts.size >= SUBAGENT_SPAN_HOSTS_MAX) {
       // FIFO eviction: remove oldest entry and close its span
       const firstKey = subagentSpanHosts.keys().next().value!
@@ -124,7 +132,7 @@ export const onSessionCreated = safe(function onSessionCreated(
     }
     subagentSpanHosts.set(sessionID, {
       hostSessionID: info.parentID,
-      active: parentActive,
+      active: childActive,
       span: subagentSpan,
     })
 
@@ -151,6 +159,13 @@ export const onSessionIdle = safe(function onSessionIdle(
 
   queueMicrotask(async () => {
     try {
+      // Close any unclosed LLM span (can happen if message.updated never fired)
+      if (active.currentSpan) {
+        try { active.currentSpan.end() } catch { /* best-effort */ }
+        active.currentSpan = null
+        metrics.spansClosed++
+      }
+
       // Close any remaining open tool spans
       for (const span of active.toolSpans.values()) {
         span.end()

@@ -80,6 +80,8 @@ export interface ActiveTrace {
   metadata: Record<string, unknown>
   /** Accumulated streaming text from message.part.updated deltas */
   streamingText: string
+  /** Timestamp when the current LLM turn started (set on first message.part.updated) */
+  currentTurnStartTime?: Date
   /** Model info captured from chat.message for span metadata */
   modelInfo?: { providerID: string; modelID: string }
   /** LLM turn counter for multi-turn span naming (e.g. "claude-sonnet-4-5 #2") */
