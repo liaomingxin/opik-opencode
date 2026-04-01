@@ -82,6 +82,29 @@ export interface ActiveTrace {
   streamingText: string
   /** Model info captured from chat.message for span metadata */
   modelInfo?: { providerID: string; modelID: string }
+  /** LLM turn counter for multi-turn span naming (e.g. "claude-sonnet-4-5 #2") */
+  llmTurnCount: number
+}
+
+// ─── Subagent Span Host (cross-session bridging) ────────────────────────────
+
+export interface SubagentSpanHost {
+  /** The session ID of the host (parent) session */
+  hostSessionID: string
+  /** The host session's ActiveTrace */
+  active: ActiveTrace
+  /** The subagent Span that child events should nest under */
+  span: any // Opik Span
+}
+
+/** Result of resolveSessionSpanContainer */
+export interface SpanContainer {
+  /** The resolved session ID (may differ from input if bridged) */
+  sessionID: string
+  /** The ActiveTrace associated with this session */
+  active: ActiveTrace
+  /** The parent Trace or Span to nest new spans under */
+  parent: any // Opik Trace | Span
 }
 
 // ─── Hook Event Payloads ─────────────────────────────────────────────────────

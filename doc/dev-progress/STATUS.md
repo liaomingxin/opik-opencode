@@ -1,6 +1,6 @@
 # opik-opencode 开发进度跟踪
 
-> 最后更新: 2026-04-02 (Phase 6)
+> 最后更新: 2026-04-01 (V2 — Thread 聚合 + Multiagent 增强)
 
 ## 项目定位
 

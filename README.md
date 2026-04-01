@@ -7,6 +7,8 @@
 
 安装后，你在 OpenCode 中的**每一次对话**都会自动记录到 Opik 平台——包括 LLM 调用、工具执行、多智能体协作的完整轨迹，无需修改任何代码。
 
+**v0.2.0 新增**: 支持 Thread 聚合，同一会话内的所有 Trace 自动归入同一 Thread；LLM Span 包含模型名称和轮次号，便于快速定位。
+
 ---
 
 ## 目录
@@ -18,6 +20,7 @@
 - [第三步：配置插件](#第三步配置插件)
 - [第四步：启动 OpenCode 并使用](#第四步启动-opencode-并使用)
 - [第五步：在 Opik 上查看 Trace 数据](#第五步在-opik-上查看-trace-数据)
+- [Thread 聚合与 Multiagent 架构](#thread-聚合与-multiagent-架构)
 - [配置参考](#配置参考)
 - [常见问题](#常见问题)
 - [License](#license)
@@ -30,10 +33,10 @@
 
 | 你在 OpenCode 里做的事 | Opik 上看到的内容 |
 |---|---|
-| 发送一条消息给 AI | 一条 **Trace**（完整对话轨迹） |
-| AI 思考并回复 | **LLM Span** — 模型名称、输入/输出文本、Token 用量 |
+| 发送一条消息给 AI | 一条 **Trace**（完整对话轨迹），自动归入 **Thread** |
+| AI 思考并回复 | **LLM Span** — 模型名称 + 轮次号（如 `claude-sonnet-4-5 #2`）、输入/输出文本、Token 用量 |
 | AI 调用工具（读文件、执行命令等） | **Tool Span** — 工具名、参数、输出、耗时 |
-| AI 委派子智能体工作 | **Subagent Span** — 嵌套在父级 Trace 下的子任务链路 |
+| AI 委派子智能体工作 | **Subagent Span** — 嵌套在父级 Trace 下的子任务链路，通过跨会话桥接完整串联 |
 
 所有数据实时同步到 Opik，你可以随时在 Opik 仪表盘上回溯、分析、评估。
 
@@ -191,28 +194,29 @@ opencode
 点击任意一条 Trace，你会看到类似这样的结构：
 
 ```
-📦 opencode-Fix login bug          ← Trace（整次对话）
+🧵 Thread: abc123-session-id         ← Thread（按 sessionID 聚合）
 │
-├─ 🤖 LLM Span                     ← 第 1 轮 AI 思考
-│   ├─ Model: claude-4
+📦 opencode-Fix login bug            ← Trace（整次对话，threadId = sessionID）
+│
+├─ 🤖 claude-sonnet-4-5              ← 第 1 轮 AI 思考（自动命名为模型名）
 │   ├─ Input: "帮我修复登录页面的 bug"
 │   ├─ Output: "我来看一下代码..."
 │   └─ Tokens: input=150, output=280
 │
-├─ 🔧 Tool: read_file              ← AI 读取文件
+├─ 🔧 tool:read_file                 ← AI 读取文件
 │   ├─ Args: { path: "src/login.ts" }
 │   └─ Output: "import React from..."
 │
-├─ 🤖 LLM Span                     ← 第 2 轮 AI 思考
+├─ 🤖 claude-sonnet-4-5 #2           ← 第 2 轮（自动添加轮次号）
 │   ├─ Input: [文件内容 + 上下文]
 │   ├─ Output: "我发现了问题，需要修改..."
 │   └─ Tokens: input=820, output=450
 │
-├─ 🔧 Tool: write_file             ← AI 写入修复
+├─ 🔧 tool:write_file                ← AI 写入修复
 │   ├─ Args: { path: "src/login.ts", content: "..." }
 │   └─ Output: "File written"
 │
-└─ 🤖 LLM Span                     ← 第 3 轮 AI 总结
+└─ 🤖 claude-sonnet-4-5 #3           ← 第 3 轮 AI 总结
     ├─ Output: "已修复！问题是..."
     └─ Tokens: input=900, output=120
     
@@ -222,15 +226,78 @@ opencode
 **多智能体场景**下，你还会看到嵌套结构：
 
 ```
-📦 opencode-Complex Task            ← 父 Trace
-├─ 🤖 LLM Span (主智能体)
-├─ 👤 Subagent: Research Agent       ← 子智能体 1
-│   ├─ 🤖 LLM Span
-│   └─ 🔧 Tool: web_search
-└─ 👤 Subagent: Code Agent           ← 子智能体 2
-    ├─ 🤖 LLM Span
-    └─ 🔧 Tool: write_file
+🧵 Thread: session-xyz               ← Thread 聚合
+│
+📦 opencode-Complex Task             ← 父 Trace (threadId = session-xyz)
+├─ 🤖 claude-sonnet-4-5 (主智能体)
+├─ 👤 subagent:Research Agent         ← 子智能体 1（通过桥接层串联）
+│   ├─ 🤖 claude-sonnet-4-5
+│   └─ 🔧 tool:web_search
+└─ 👤 subagent:Code Agent             ← 子智能体 2（通过桥接层串联）
+    ├─ 🤖 claude-sonnet-4-5
+    └─ 🔧 tool:write_file
 ```
+
+---
+
+## Thread 聚合与 Multiagent 架构
+
+### Thread 聚合
+
+插件会自动为每个 OpenCode 会话设置 `threadId`，使同一会话内的所有 Trace 在 Opik 中归入同一 **Thread**。你可以在 Opik 仪表盘中按 Thread 维度聚合查看，快速回溯一个完整任务的所有对话轮次。
+
+- **threadId** = OpenCode 的 `sessionID`（root session 级别）
+- 子 agent 共享父 Trace，不会产生额外 Thread
+
+### Multiagent 数据串联架构
+
+在多智能体场景下，插件通过 **跨会话桥接层** (`subagentSpanHosts`) 确保子 agent 的所有数据（LLM 调用、Tool 调用）都能正确挂载到父 Trace 的 Subagent Span 下，即使事件乱序也不会丢失数据。
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Opik Thread (threadId = sessionID)           │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  Trace: opencode-Fix login bug                            │  │
+│  │                                                           │  │
+│  │  ├─ LLM Span: claude-sonnet-4-5                           │  │
+│  │  │   (第 1 轮: 分析问题)                                  │  │
+│  │  │                                                        │  │
+│  │  ├─ Tool Span: tool:read_file                             │  │
+│  │  │   (读取源码)                                           │  │
+│  │  │                                                        │  │
+│  │  ├─ LLM Span: claude-sonnet-4-5 #2                        │  │
+│  │  │   (第 2 轮: 制定方案)                                  │  │
+│  │  │                                                        │  │
+│  │  ├─ Subagent Span: subagent:Research Agent  ← 桥接层管理  │  │
+│  │  │   ├─ LLM Span: claude-sonnet-4-5                       │  │
+│  │  │   └─ Tool Span: tool:web_search                        │  │
+│  │  │                                                        │  │
+│  │  ├─ Subagent Span: subagent:Code Agent      ← 桥接层管理  │  │
+│  │  │   ├─ LLM Span: claude-sonnet-4-5                       │  │
+│  │  │   └─ Tool Span: tool:write_file                        │  │
+│  │  │                                                        │  │
+│  │  └─ LLM Span: claude-sonnet-4-5 #3                        │  │
+│  │      (第 3 轮: 汇总结果)                                  │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 核心组件说明
+
+| 组件 | 作用 |
+|---|---|
+| **threadId** | 将同一 OpenCode 会话的所有 Trace 聚合到 Opik 的同一 Thread |
+| **resolveSessionSpanContainer** | 统一的容器解析函数，自动查找每个事件应该挂载的父级 Trace 或 Span |
+| **subagentSpanHosts** | 跨会话桥接 Map，解决子 agent 事件到达时父 session 信息的查找问题 |
+| **LLM 轮次命名** | 自动为 LLM Span 添加模型名 + 轮次号（如 `claude-sonnet-4-5 #2`），便于区分多轮对话 |
+
+### 桥接层工作原理
+
+1. 子 session 创建时，在 `subagentSpanHosts` 中注册 `childSessionID → 父 trace 信息`
+2. 当子 session 的 tool/LLM 事件到来时，通过 `resolveSessionSpanContainer` 先查桥接表找到父 trace
+3. 子 session 结束时，自动清除桥接记录
+4. 桥接表最大容量 1000 条，超出时 FIFO 淘汰最早的记录
 
 ---
 

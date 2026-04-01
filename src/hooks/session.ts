@@ -8,17 +8,19 @@
 
 import type {
   ActiveTrace,
+  SubagentSpanHost,
   SessionCreatedPayload,
   SessionIdlePayload,
   ExporterMetrics,
 } from "../types.js"
 import { zeroTokenUsage, totalTokens } from "../types.js"
-import { SPAN_TYPE } from "../constants.js"
+import { SPAN_TYPE, SUBAGENT_SPAN_HOSTS_MAX } from "../constants.js"
 import { safe } from "../helpers.js"
 
 export interface SessionHookDeps {
   opikClient: any
   activeTraces: Map<string, ActiveTrace>
+  subagentSpanHosts: Map<string, SubagentSpanHost>
   metrics: ExporterMetrics
   projectName: string
   onFlush: () => Promise<void>
@@ -35,12 +37,13 @@ export const onSessionCreated = safe(function onSessionCreated(
   deps: SessionHookDeps,
 ): void {
   const { sessionID, info } = payload
-  const { opikClient, activeTraces, metrics, projectName } = deps
+  const { opikClient, activeTraces, subagentSpanHosts, metrics, projectName } = deps
 
   if (!info.parentID) {
     // ── Root session → new Trace ──────────────────────────────────────
     const trace = opikClient.trace({
       name: `opencode-${info.title ?? sessionID}`,
+      threadId: sessionID,
       input: {},
       metadata: {
         sessionID,
@@ -62,6 +65,7 @@ export const onSessionCreated = safe(function onSessionCreated(
       usage: zeroTokenUsage(),
       metadata: { sessionID, directory: info.directory },
       streamingText: "",
+      llmTurnCount: 0,
     })
 
     metrics.tracesCreated++
@@ -102,10 +106,27 @@ export const onSessionCreated = safe(function onSessionCreated(
         parentSessionID: info.parentID,
       },
       streamingText: "",
+      llmTurnCount: 0,
     })
 
     // Parent tracks its children
     parentActive.subagentSpans.set(sessionID, subagentSpan)
+
+    // Register cross-session bridge for event reordering resilience
+    if (subagentSpanHosts.size >= SUBAGENT_SPAN_HOSTS_MAX) {
+      // FIFO eviction: remove oldest entry and close its span
+      const firstKey = subagentSpanHosts.keys().next().value!
+      const evicted = subagentSpanHosts.get(firstKey)
+      if (evicted) {
+        try { evicted.span.end() } catch { /* best-effort */ }
+      }
+      subagentSpanHosts.delete(firstKey)
+    }
+    subagentSpanHosts.set(sessionID, {
+      hostSessionID: info.parentID,
+      active: parentActive,
+      span: subagentSpan,
+    })
 
     metrics.spansCreated++
   }
@@ -123,7 +144,7 @@ export const onSessionIdle = safe(function onSessionIdle(
   deps: SessionHookDeps,
 ): void {
   const { sessionID } = payload
-  const { activeTraces, metrics, onFlush } = deps
+  const { activeTraces, subagentSpanHosts, metrics, onFlush } = deps
 
   const active = activeTraces.get(sessionID)
   if (!active) return
@@ -136,6 +157,9 @@ export const onSessionIdle = safe(function onSessionIdle(
         metrics.spansClosed++
       }
       active.toolSpans.clear()
+
+      // Clean up bridge entry regardless of root/child
+      subagentSpanHosts.delete(sessionID)
 
       if (active.parentSpan) {
         // ── Child session: close subagent span only ───────────────────

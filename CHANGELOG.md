@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-01
+
+### Added
+
+- **Thread 聚合** — Trace 创建时自动设置 `threadId = sessionID`，Opik 后端可按 Thread 维度聚合同一会话的所有 Trace ([Task 1])
+- **统一容器解析** — 新增 `resolveSessionSpanContainer()` 统一函数（`src/resolve.ts`），替代各 hook 中分散的 `anchor = parentSpan ?? trace` 逻辑 ([Task 2])
+- **跨会话桥接层** — 新增 `subagentSpanHosts` Map，解决 Multiagent 场景下事件乱序导致子 agent 数据丢失的问题，FIFO 淘汰策略（最大 1000 条） ([Task 3])
+- **LLM Span 多轮命名** — LLM span 名称包含模型名和轮次号，如 `claude-sonnet-4-5`（首轮）/ `claude-sonnet-4-5 #2`（后续） ([Task 4])
+- `ActiveTrace` 新增 `llmTurnCount` 字段，追踪每个 session 的 LLM 调用轮次
+- `SubagentSpanHost` 类型定义和 `SpanContainer` 返回类型
+- `SUBAGENT_SPAN_HOSTS_MAX = 1000` 常量
+
+### Changed
+
+- `src/hooks/session.ts` — `onSessionCreated` 中 root session 的 `opikClient.trace()` 调用新增 `threadId` 参数；child session 注册桥接表
+- `src/hooks/llm.ts` — 使用 `resolveSessionSpanContainer()` 替代硬编码 anchor；span 命名使用 `modelID + 轮次号`
+- `src/hooks/tool.ts` — 使用 `resolveSessionSpanContainer()` 替代硬编码 anchor
+- `src/service.ts` — 新增 `subagentSpanHosts` 状态管理、桥接注册/查询/清除方法
+
+### Testing
+
+- 所有 hook 测试更新以验证 `threadId`、桥接层、统一解析器、LLM 轮次命名
+- `session.test.ts` — 验证 `trace()` 调用包含 `threadId`，桥接注册/清除
+- `llm.test.ts` — 验证 span name 包含 model + 轮次号
+- `tool.test.ts` — 验证通过 resolver 创建 span
+- `service.e2e.test.ts` — 验证完整 round-trip 中 trace 携带 threadId，子 session 通过桥接正确挂载
+- `plugin.smoke.test.ts` — multiagent 场景验证
+
 ## [0.1.0] - 2026-04-02
 
 ### Added
@@ -48,5 +76,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 22 end-to-end integration tests
 - Full test coverage for all hook modules, service lifecycle, config, helpers, and plugin API surface
 
-[Unreleased]: https://github.com/liaomingxin/opik-opencode/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/liaomingxin/opik-opencode/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/liaomingxin/opik-opencode/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/liaomingxin/opik-opencode/releases/tag/v0.1.0

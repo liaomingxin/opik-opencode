@@ -12,6 +12,7 @@ import { Opik } from "opik"
 import type {
   OpikPluginConfig,
   ActiveTrace,
+  SubagentSpanHost,
   ExporterMetrics,
   SessionCreatedPayload,
   SessionIdlePayload,
@@ -32,6 +33,7 @@ export class OpikService {
   private client!: Opik
   private config!: Required<OpikPluginConfig>
   private activeTraces = new Map<string, ActiveTrace>()
+  private subagentSpanHosts = new Map<string, SubagentSpanHost>()
   private finalizedSessions = new Set<string>()
   private processedMessages = new Set<string>()
   private metrics: ExporterMetrics = createInitialMetrics()
@@ -103,6 +105,7 @@ export class OpikService {
     // Final flush
     await this.flushWithRetry()
     this.activeTraces.clear()
+    this.subagentSpanHosts.clear()
     this.started = false
     console.log("[opik-opencode] Stopped.")
   }
@@ -113,6 +116,7 @@ export class OpikService {
     onSessionCreated(payload, {
       opikClient: this.client,
       activeTraces: this.activeTraces,
+      subagentSpanHosts: this.subagentSpanHosts,
       metrics: this.metrics,
       projectName: this.config.projectName,
       onFlush: () => this.flushWithRetry(),
@@ -125,6 +129,7 @@ export class OpikService {
     onSessionIdle(payload, {
       opikClient: this.client,
       activeTraces: this.activeTraces,
+      subagentSpanHosts: this.subagentSpanHosts,
       metrics: this.metrics,
       projectName: this.config.projectName,
       onFlush: () => this.flushWithRetry(),
@@ -134,6 +139,7 @@ export class OpikService {
   handleLlmInput(payload: LlmInputPayload): void {
     onLlmInput(payload, {
       activeTraces: this.activeTraces,
+      subagentSpanHosts: this.subagentSpanHosts,
       metrics: this.metrics,
       sanitize: this.config.sanitizePayloads,
     })
@@ -142,6 +148,7 @@ export class OpikService {
   handleLlmOutput(payload: LlmOutputPayload): void {
     onLlmOutput(payload, {
       activeTraces: this.activeTraces,
+      subagentSpanHosts: this.subagentSpanHosts,
       metrics: this.metrics,
       sanitize: this.config.sanitizePayloads,
     })
@@ -153,6 +160,7 @@ export class OpikService {
   handleMessagePartUpdated(payload: MessagePartUpdatedPayload): void {
     onMessagePartUpdated(payload, {
       activeTraces: this.activeTraces,
+      subagentSpanHosts: this.subagentSpanHosts,
       metrics: this.metrics,
       sanitize: this.config.sanitizePayloads,
     })
@@ -169,6 +177,7 @@ export class OpikService {
   handleToolBefore(payload: ToolBeforePayload): void {
     onToolBefore(payload, {
       activeTraces: this.activeTraces,
+      subagentSpanHosts: this.subagentSpanHosts,
       metrics: this.metrics,
       sanitize: this.config.sanitizePayloads,
     })
@@ -177,6 +186,7 @@ export class OpikService {
   handleToolAfter(payload: ToolAfterPayload): void {
     onToolAfter(payload, {
       activeTraces: this.activeTraces,
+      subagentSpanHosts: this.subagentSpanHosts,
       metrics: this.metrics,
       sanitize: this.config.sanitizePayloads,
     })

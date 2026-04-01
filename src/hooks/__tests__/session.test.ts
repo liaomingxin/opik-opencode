@@ -8,7 +8,7 @@ import {
   onSessionIdle,
   type SessionHookDeps,
 } from "../session.js"
-import type { ActiveTrace, ExporterMetrics } from "../../types.js"
+import type { ActiveTrace, SubagentSpanHost, ExporterMetrics } from "../../types.js"
 import { createInitialMetrics } from "../../types.js"
 
 function createMockSpan() {
@@ -48,6 +48,7 @@ function createMockActiveTrace(
     usage: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     metadata: {},
     streamingText: "",
+    llmTurnCount: 0,
     ...overrides,
   }
 }
@@ -70,6 +71,7 @@ describe("onSessionCreated", () => {
     deps = {
       opikClient,
       activeTraces: new Map(),
+      subagentSpanHosts: new Map(),
       metrics,
       projectName: "test-project",
       onFlush: vi.fn().mockResolvedValue(undefined),
@@ -88,6 +90,7 @@ describe("onSessionCreated", () => {
     expect(opikClient.trace).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "opencode-My Session",
+        threadId: "root-1",
         projectName: "test-project",
         metadata: expect.objectContaining({
           sessionID: "root-1",
@@ -212,6 +215,25 @@ describe("onSessionCreated", () => {
     consoleSpy.mockRestore()
   })
 
+  it("should register child session in subagentSpanHosts bridge", () => {
+    const parentTrace = createMockTrace()
+    const parentActive = createMockActiveTrace({ trace: parentTrace })
+    deps.activeTraces.set("parent-1", parentActive)
+
+    onSessionCreated(
+      {
+        sessionID: "child-bridge",
+        info: { id: "child-bridge", parentID: "parent-1", title: "Bridged Child" },
+      },
+      deps,
+    )
+
+    expect(deps.subagentSpanHosts.has("child-bridge")).toBe(true)
+    const host = deps.subagentSpanHosts.get("child-bridge")!
+    expect(host.hostSessionID).toBe("parent-1")
+    expect(host.active).toBe(parentActive)
+  })
+
   it("should initialize ActiveTrace with correct default values", () => {
     onSessionCreated(
       {
@@ -232,6 +254,7 @@ describe("onSessionCreated", () => {
       reasoning: 0,
       cache: { read: 0, write: 0 },
     })
+    expect(active.llmTurnCount).toBe(0)
     expect(active.metadata).toEqual(
       expect.objectContaining({ sessionID: "root-init" }),
     )
@@ -251,6 +274,7 @@ describe("onSessionIdle", () => {
     deps = {
       opikClient,
       activeTraces: new Map(),
+      subagentSpanHosts: new Map(),
       metrics,
       projectName: "test-project",
       onFlush: vi.fn().mockResolvedValue(undefined),
@@ -370,6 +394,26 @@ describe("onSessionIdle", () => {
       }),
     )
     expect(trace.end).toHaveBeenCalled()
+  })
+
+  it("should clean up subagentSpanHosts bridge on session idle", async () => {
+    const rootTrace = createMockTrace()
+    const parentSpan = createMockSpan()
+    const childActive = createMockActiveTrace({
+      trace: rootTrace,
+      parentSpan,
+    })
+    deps.activeTraces.set("child-bridge", childActive)
+    deps.subagentSpanHosts.set("child-bridge", {
+      hostSessionID: "parent-1",
+      active: createMockActiveTrace(),
+      span: parentSpan,
+    })
+
+    onSessionIdle({ sessionID: "child-bridge" }, deps)
+    await flushMicrotasks()
+
+    expect(deps.subagentSpanHosts.has("child-bridge")).toBe(false)
   })
 
   it("should increment metrics.errors on finalization failure", async () => {

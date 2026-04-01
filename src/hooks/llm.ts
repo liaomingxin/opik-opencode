@@ -8,6 +8,7 @@
 
 import type {
   ActiveTrace,
+  SubagentSpanHost,
   LlmInputPayload,
   LlmOutputPayload,
   MessagePartUpdatedPayload,
@@ -17,9 +18,11 @@ import { totalTokens } from "../types.js"
 import { SPAN_TYPE } from "../constants.js"
 import { safe } from "../helpers.js"
 import { sanitizePayload } from "../payload-sanitizer.js"
+import { resolveSessionSpanContainer } from "../resolve.js"
 
 export interface LlmHookDeps {
   activeTraces: Map<string, ActiveTrace>
+  subagentSpanHosts: Map<string, SubagentSpanHost>
   metrics: ExporterMetrics
   sanitize: boolean
 }
@@ -65,10 +68,11 @@ export const onLlmInput = safe(function onLlmInput(
   deps: LlmHookDeps,
 ): void {
   const { sessionID, model, agent, message, parts } = payload
-  const { activeTraces, metrics, sanitize } = deps
+  const { activeTraces, subagentSpanHosts, metrics, sanitize } = deps
 
-  const active = activeTraces.get(sessionID)
-  if (!active) return
+  const container = resolveSessionSpanContainer(sessionID, activeTraces, subagentSpanHosts)
+  if (!container) return
+  const { active, parent: anchor } = container
 
   // Extract user content from message/parts for span input
   const userContent = extractUserContent(message, parts)
@@ -76,11 +80,15 @@ export const onLlmInput = safe(function onLlmInput(
     ? sanitizePayload({ messages: userContent })
     : { messages: userContent }
 
-  // Anchor span: if child session, nest under parentSpan; else under trace
-  const anchor = active.parentSpan ?? active.trace
+  // Multi-turn naming: "claude-sonnet-4-5" (first), "claude-sonnet-4-5 #2" (subsequent)
+  active.llmTurnCount += 1
+  const modelName = model?.modelID ?? "llm"
+  const spanName = active.llmTurnCount === 1
+    ? modelName
+    : `${modelName} #${active.llmTurnCount}`
 
   const llmSpan = anchor.span({
-    name: "llm",
+    name: spanName,
     type: SPAN_TYPE.LLM,
     input: inputData,
     metadata: {
@@ -112,17 +120,23 @@ export const onLlmOutput = safe(function onLlmOutput(
   deps: LlmHookDeps,
 ): void {
   const { sessionID, content, modelID, providerID, tokens, error } = payload
-  const { activeTraces, metrics, sanitize } = deps
+  const { activeTraces, subagentSpanHosts, metrics, sanitize } = deps
 
-  const active = activeTraces.get(sessionID)
-  if (!active) return
+  const container = resolveSessionSpanContainer(sessionID, activeTraces, subagentSpanHosts)
+  if (!container) return
+  const { active, parent: anchor } = container
 
   // If no currentSpan exists (chat.message only fires once, but message.updated
   // fires for each LLM turn including after tool-calls), create a new LLM span.
   if (!active.currentSpan) {
-    const anchor = active.parentSpan ?? active.trace
+    active.llmTurnCount += 1
+    const fallbackModelName = modelID ?? active.modelInfo?.modelID ?? "llm"
+    const fallbackSpanName = active.llmTurnCount === 1
+      ? fallbackModelName
+      : `${fallbackModelName} #${active.llmTurnCount}`
+
     active.currentSpan = anchor.span({
-      name: "llm",
+      name: fallbackSpanName,
       type: SPAN_TYPE.LLM,
       input: {},
       metadata: {
@@ -190,10 +204,11 @@ export const onMessagePartUpdated = safe(function onMessagePartUpdated(
   deps: LlmHookDeps,
 ): void {
   const { sessionID, part, delta } = payload
-  const { activeTraces } = deps
+  const { activeTraces, subagentSpanHosts } = deps
 
-  const active = activeTraces.get(sessionID)
-  if (!active) return
+  const container = resolveSessionSpanContainer(sessionID, activeTraces, subagentSpanHosts)
+  if (!container) return
+  const { active } = container
 
   // OpenCode sends full part.text (not incremental deltas).
   // For type=text parts, replace streamingText with the latest full text.

@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { onToolBefore, onToolAfter, type ToolHookDeps } from "../tool.js"
-import type { ActiveTrace, ExporterMetrics } from "../../types.js"
+import type { ActiveTrace, SubagentSpanHost, ExporterMetrics } from "../../types.js"
 import { createInitialMetrics } from "../../types.js"
 
 function createMockSpan() {
@@ -35,6 +35,7 @@ function createMockActiveTrace(overrides?: Partial<ActiveTrace>): ActiveTrace {
     usage: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     metadata: {},
     streamingText: "",
+    llmTurnCount: 0,
     ...overrides,
   }
 }
@@ -47,6 +48,7 @@ describe("onToolBefore", () => {
     metrics = createInitialMetrics()
     deps = {
       activeTraces: new Map(),
+      subagentSpanHosts: new Map(),
       metrics,
       sanitize: false,
     }
@@ -102,6 +104,7 @@ describe("onToolAfter", () => {
     metrics = createInitialMetrics()
     deps = {
       activeTraces: new Map(),
+      subagentSpanHosts: new Map(),
       metrics,
       sanitize: false,
     }

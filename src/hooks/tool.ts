@@ -7,6 +7,7 @@
 
 import type {
   ActiveTrace,
+  SubagentSpanHost,
   ToolBeforePayload,
   ToolAfterPayload,
   ExporterMetrics,
@@ -14,9 +15,11 @@ import type {
 import { SPAN_TYPE } from "../constants.js"
 import { safe } from "../helpers.js"
 import { sanitizePayload } from "../payload-sanitizer.js"
+import { resolveSessionSpanContainer } from "../resolve.js"
 
 export interface ToolHookDeps {
   activeTraces: Map<string, ActiveTrace>
+  subagentSpanHosts: Map<string, SubagentSpanHost>
   metrics: ExporterMetrics
   sanitize: boolean
 }
@@ -24,25 +27,27 @@ export interface ToolHookDeps {
 /**
  * Resolve the ActiveTrace for a given sessionID with 3-level fallback.
  *
- * 1. Exact match by sessionID
+ * 1. Exact match by sessionID (via resolveSessionSpanContainer)
  * 2. If only one active trace exists, use it
  * 3. Use the most recently active trace
  *
  * This mirrors opik-openclaw's degradation strategy for tool.execute.after.
  */
-function resolveActiveTrace(
+function resolveActiveTraceWithFallback(
   sessionID: string | undefined,
   activeTraces: Map<string, ActiveTrace>,
-): ActiveTrace | undefined {
-  // Level 1: exact match
+  subagentSpanHosts: Map<string, SubagentSpanHost>,
+): { active: ActiveTrace; anchor: any } | undefined {
+  // Level 1: exact match via resolver (includes bridge lookup)
   if (sessionID) {
-    const exact = activeTraces.get(sessionID)
-    if (exact) return exact
+    const container = resolveSessionSpanContainer(sessionID, activeTraces, subagentSpanHosts)
+    if (container) return { active: container.active, anchor: container.parent }
   }
 
   // Level 2: single active trace
   if (activeTraces.size === 1) {
-    return activeTraces.values().next().value
+    const active = activeTraces.values().next().value!
+    return { active, anchor: active.parentSpan ?? active.trace }
   }
 
   // Level 3: most recently active
@@ -55,7 +60,9 @@ function resolveActiveTrace(
         mostRecent = trace
       }
     }
-    return mostRecent
+    if (mostRecent) {
+      return { active: mostRecent, anchor: mostRecent.parentSpan ?? mostRecent.trace }
+    }
   }
 
   return undefined
@@ -69,15 +76,13 @@ export const onToolBefore = safe(function onToolBefore(
   deps: ToolHookDeps,
 ): void {
   const { tool, sessionID, callID, args } = payload
-  const { activeTraces, metrics, sanitize } = deps
+  const { activeTraces, subagentSpanHosts, metrics, sanitize } = deps
 
-  const active = resolveActiveTrace(sessionID, activeTraces)
-  if (!active) return
+  const resolved = resolveActiveTraceWithFallback(sessionID, activeTraces, subagentSpanHosts)
+  if (!resolved) return
+  const { active, anchor } = resolved
 
   const inputData = sanitize ? sanitizePayload(args) : args
-
-  // Anchor: if child session, nest tool span under subagent span
-  const anchor = active.parentSpan ?? active.trace
 
   const toolSpan = anchor.span({
     name: `tool:${tool}`,
@@ -110,10 +115,11 @@ export const onToolAfter = safe(function onToolAfter(
   deps: ToolHookDeps,
 ): void {
   const { tool, sessionID, callID, title, output, metadata } = payload
-  const { activeTraces, metrics, sanitize } = deps
+  const { activeTraces, subagentSpanHosts, metrics, sanitize } = deps
 
-  const active = resolveActiveTrace(sessionID, activeTraces)
-  if (!active) return
+  const resolved = resolveActiveTraceWithFallback(sessionID, activeTraces, subagentSpanHosts)
+  if (!resolved) return
+  const { active } = resolved
 
   const span = active.toolSpans.get(callID)
   if (!span) {

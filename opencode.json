@@ -1,0 +1,9 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    ["/Users/liaomx/lmx/github/newopik/fork/opik-opencode/dist/index.js", {
+      "apiUrl": "http://10.101.102.98:80",
+      "projectName": "opencode-real-test"
+    }]
+  ]
+}

@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { onLlmInput, onLlmOutput, onMessagePartUpdated, type LlmHookDeps } from "../llm.js"
-import type { ActiveTrace, ExporterMetrics } from "../../types.js"
+import type { ActiveTrace, SubagentSpanHost, ExporterMetrics } from "../../types.js"
 import { createInitialMetrics } from "../../types.js"
 
 function createMockSpan() {
@@ -35,6 +35,7 @@ function createMockActiveTrace(overrides?: Partial<ActiveTrace>): ActiveTrace {
     usage: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     streamingText: "",
     metadata: {},
+    llmTurnCount: 0,
     ...overrides,
   }
 }
@@ -47,12 +48,13 @@ describe("onLlmInput", () => {
     metrics = createInitialMetrics()
     deps = {
       activeTraces: new Map(),
+      subagentSpanHosts: new Map(),
       metrics,
       sanitize: false,
     }
   })
 
-  it("should create an LLM span for a root session", () => {
+  it("should create an LLM span with model name for first turn", () => {
     const active = createMockActiveTrace()
     deps.activeTraces.set("session-1", active)
 
@@ -68,12 +70,62 @@ describe("onLlmInput", () => {
 
     expect(active.trace.span).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "llm",
+        name: "claude-4",
         type: "llm",
       }),
     )
     expect(active.currentSpan).not.toBeNull()
+    expect(active.llmTurnCount).toBe(1)
     expect(metrics.spansCreated).toBe(1)
+  })
+
+  it("should include turn number in span name for subsequent turns", () => {
+    const active = createMockActiveTrace()
+    deps.activeTraces.set("session-1", active)
+
+    // Turn 1
+    onLlmInput(
+      {
+        sessionID: "session-1",
+        model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
+        message: { content: "First" },
+      },
+      deps,
+    )
+    expect(active.trace.span).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: "claude-sonnet-4-5" }),
+    )
+
+    // Turn 2
+    onLlmInput(
+      {
+        sessionID: "session-1",
+        model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
+        message: { content: "Second" },
+      },
+      deps,
+    )
+    expect(active.trace.span).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: "claude-sonnet-4-5 #2" }),
+    )
+    expect(active.llmTurnCount).toBe(2)
+  })
+
+  it("should fall back to 'llm' when model is not provided", () => {
+    const active = createMockActiveTrace()
+    deps.activeTraces.set("session-1", active)
+
+    onLlmInput(
+      {
+        sessionID: "session-1",
+        message: { content: "Hello" },
+      },
+      deps,
+    )
+
+    expect(active.trace.span).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "llm" }),
+    )
   })
 
   it("should do nothing if no active trace exists", () => {
@@ -94,7 +146,9 @@ describe("onLlmInput", () => {
       deps,
     )
 
-    expect(parentSpan.span).toHaveBeenCalled()
+    expect(parentSpan.span).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "llm" }), // no model → "llm"
+    )
     expect(active.trace.span).not.toHaveBeenCalled()
   })
 })
@@ -107,9 +161,35 @@ describe("onLlmOutput", () => {
     metrics = createInitialMetrics()
     deps = {
       activeTraces: new Map(),
+      subagentSpanHosts: new Map(),
       metrics,
       sanitize: false,
     }
+  })
+
+  it("should create fallback span with model name and turn count when no currentSpan", () => {
+    const active = createMockActiveTrace({ llmTurnCount: 1 }) // already had one turn
+    deps.activeTraces.set("session-1", active)
+
+    onLlmOutput(
+      {
+        sessionID: "session-1",
+        content: "Response",
+        modelID: "claude-4",
+        providerID: "anthropic",
+        messageID: "msg-1",
+      },
+      deps,
+    )
+
+    // Should create span named "claude-4 #2" (second turn)
+    expect(active.trace.span).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "claude-4 #2",
+        type: "llm",
+      }),
+    )
+    expect(active.llmTurnCount).toBe(2)
   })
 
   it("should update and close the current LLM span", () => {
@@ -147,6 +227,7 @@ describe("onMessagePartUpdated", () => {
     metrics = createInitialMetrics()
     deps = {
       activeTraces: new Map(),
+      subagentSpanHosts: new Map(),
       metrics,
       sanitize: false,
     }

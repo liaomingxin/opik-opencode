@@ -11,6 +11,9 @@ export const DEFAULTS = {
   EXPIRE_SCAN_INTERVAL: 60_000,
 } as const
 
+/** Maximum number of subagent span host entries (FIFO eviction) */
+export const SUBAGENT_SPAN_HOSTS_MAX = 1000
+
 /** Span type identifiers used in Opik */
 export const SPAN_TYPE = {
   LLM: "llm",
