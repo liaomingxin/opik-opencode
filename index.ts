@@ -341,11 +341,7 @@ export {
   type ConfigDeps,
 } from "./src/configure.js"
 
-// Re-export config file utilities for programmatic use
-export {
-  findOpikConfigPath,
-  loadOpikConfigFile,
-  writeOpikConfigFile,
-  resolveOpikConfigWritePath,
-  OPIK_CONFIG_FILENAME,
-} from "./src/config-file.js"
+// Note: config-file utilities (findOpikConfigPath, loadOpikConfigFile, etc.)
+// are intentionally NOT re-exported from the main entry point.
+// OpenCode's plugin loader rejects modules with extra named exports.
+// Import directly from "./src/config-file.js" if needed programmatically.

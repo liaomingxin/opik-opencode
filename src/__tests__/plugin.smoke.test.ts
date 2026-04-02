@@ -36,6 +36,11 @@ vi.mock("opik", () => ({
   disableLogger: vi.fn(),
 }))
 
+// Mock config-file module so tests don't read the real ~/.config/opencode/opik-opencode.json
+vi.mock("../config-file.js", () => ({
+  loadOpikConfigFile: vi.fn(() => ({})),
+}))
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /**
