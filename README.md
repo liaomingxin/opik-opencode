@@ -7,7 +7,7 @@
 
 安装后，你在 OpenCode 中的**每一次对话**都会自动记录到 Opik 平台——包括 LLM 调用、工具执行、多智能体协作的完整轨迹，无需修改任何代码。
 
-**v0.3.0 新增**: 支持[独立配置文件](#方式-a独立配置文件推荐)（`.opencode/opik-opencode.json` 或 `~/.config/opencode/opik-opencode.json`），`opencode.json` 中只需裸字符串注册，与 oh-my-opencode 等工具完全兼容。
+**v0.4.0 新增**: 支持[独立配置文件](#方式-a独立配置文件推荐)（`.opencode/opik-opencode.json` 或 `~/.config/opencode/opik-opencode.json`），`opencode.json` 中只需裸字符串注册，与 oh-my-opencode 等工具完全兼容。
 
 **v0.2.0 新增**: 支持 Thread 聚合，同一会话内的所有 Trace 自动归入同一 Thread；LLM Span 包含模型名称和轮次号，便于快速定位。
 
@@ -116,7 +116,7 @@ npm install @liaomx/opik-opencode
 
 ### 方式 A：独立配置文件（推荐）
 
-**v0.3.0 新增**。将 Opik 配置写在独立文件中，`opencode.json` 只保留裸字符串注册。这是**兼容性最好**的方式，与 oh-my-opencode 等工具完全兼容。
+**v0.4.0 新增**。将 Opik 配置写在独立文件中，`opencode.json` 只保留裸字符串注册。这是**兼容性最好**的方式，与 oh-my-opencode 等工具完全兼容。
 
 **1) 在 `opencode.json` 中注册插件（只写包名，不带配置）：**
 
