@@ -42,11 +42,17 @@ export class OpikService {
 
   /**
    * Initialize the Opik client and start background tasks.
+   *
+   * @param pluginConfig - Merged explicit config (createOpikPlugin arg + pluginOptions).
+   * @param fileConfig   - Config loaded from the independent opik-opencode.json file.
    */
-  async start(pluginConfig?: Partial<OpikPluginConfig>): Promise<void> {
+  async start(
+    pluginConfig?: Partial<OpikPluginConfig>,
+    fileConfig?: Partial<OpikPluginConfig>,
+  ): Promise<void> {
     if (this.started) return
 
-    this.config = resolveConfig(pluginConfig)
+    this.config = resolveConfig(pluginConfig, fileConfig)
 
     // Initialize Opik client
     // SDK expects: { apiKey, apiUrl, projectName, workspaceName }

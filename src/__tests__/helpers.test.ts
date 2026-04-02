@@ -100,6 +100,53 @@ describe("resolveConfig", () => {
     expect(config.projectName).toBe(DEFAULTS.PROJECT_NAME) // default
     expect(config.flushRetries).toBe(DEFAULTS.FLUSH_RETRIES) // default
   })
+
+  // ── fileConfig (independent config file) priority tests ──────────────────
+
+  it("should use fileConfig when no explicit config and no env vars", () => {
+    const config = resolveConfig({}, {
+      apiUrl: "http://from-file/api",
+      projectName: "file-project",
+      apiKey: "file-key",
+      workspaceName: "file-ws",
+    })
+    expect(config.apiUrl).toBe("http://from-file/api")
+    expect(config.projectName).toBe("file-project")
+    expect(config.apiKey).toBe("file-key")
+    expect(config.workspaceName).toBe("file-ws")
+  })
+
+  it("should prioritize explicit config over fileConfig", () => {
+    const config = resolveConfig(
+      { apiKey: "explicit-key", projectName: "explicit-proj" },
+      { apiKey: "file-key", projectName: "file-proj", apiUrl: "http://file/api" },
+    )
+    expect(config.apiKey).toBe("explicit-key")
+    expect(config.projectName).toBe("explicit-proj")
+    // fileConfig field not overridden by explicit config → used
+    expect(config.apiUrl).toBe("http://file/api")
+  })
+
+  it("should prioritize fileConfig over environment variables", () => {
+    process.env.OPIK_API_KEY = "env-key"
+    process.env.OPIK_PROJECT_NAME = "env-project"
+
+    const config = resolveConfig({}, {
+      apiKey: "file-key",
+      projectName: "file-project",
+    })
+
+    expect(config.apiKey).toBe("file-key")
+    expect(config.projectName).toBe("file-project")
+  })
+
+  it("should fall back to env vars when fileConfig field is undefined", () => {
+    process.env.OPIK_API_KEY = "env-key"
+
+    const config = resolveConfig({}, { projectName: "file-project" })
+    expect(config.apiKey).toBe("env-key") // env fallback
+    expect(config.projectName).toBe("file-project") // from fileConfig
+  })
 })
 
 // ─── safe() ─────────────────────────────────────────────────────────────────

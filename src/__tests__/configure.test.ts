@@ -263,6 +263,20 @@ describe("getApiKeyHelpText", () => {
 // ─── showOpikStatus ─────────────────────────────────────────────────────────
 
 describe("showOpikStatus", () => {
+  /** Create a ConfigDeps fixture with the new opik config file fields. */
+  function makeDeps(overrides: {
+    loadConfig: () => Record<string, unknown>
+    loadOpikConfig?: () => Record<string, unknown>
+  }): Parameters<typeof showOpikStatus>[0] {
+    return {
+      loadConfig: overrides.loadConfig,
+      writeConfig: async () => undefined,
+      loadOpikConfig: overrides.loadOpikConfig ?? (() => ({})),
+      writeOpikConfig: async () => undefined,
+      opikConfigPath: "/mock/opik-opencode.json",
+    }
+  }
+
   function captureOutput(fn: () => void): string {
     const logSpy = vi
       .spyOn(console, "log")
@@ -273,30 +287,28 @@ describe("showOpikStatus", () => {
     return output
   }
 
-  test("displays not configured when plugin not found", () => {
+  test("displays not configured when plugin not found and no config file", () => {
     const output = captureOutput(() =>
-      showOpikStatus({
+      showOpikStatus(makeDeps({
         loadConfig: () => ({ plugin: [] }),
-        writeConfig: async () => undefined,
-      }),
+      })),
     )
     expect(output).toContain("not configured")
     expect(output).toContain("npx")
   })
 
-  test("displays not configured when no plugin key", () => {
+  test("displays not configured when no plugin key and no config file", () => {
     const output = captureOutput(() =>
-      showOpikStatus({
+      showOpikStatus(makeDeps({
         loadConfig: () => ({}),
-        writeConfig: async () => undefined,
-      }),
+      })),
     )
     expect(output).toContain("not configured")
   })
 
-  test("displays config and masks API key", () => {
+  test("displays config and masks API key (from tuple options)", () => {
     const output = captureOutput(() =>
-      showOpikStatus({
+      showOpikStatus(makeDeps({
         loadConfig: () => ({
           plugin: [
             [
@@ -310,8 +322,7 @@ describe("showOpikStatus", () => {
             ],
           ],
         }),
-        writeConfig: async () => undefined,
-      }),
+      })),
     )
     expect(output).toContain("API URL:    https://opik.example.com/api")
     expect(output).toContain("Workspace:  my-ws")
@@ -322,10 +333,9 @@ describe("showOpikStatus", () => {
 
   test("shows defaults when options are empty (string entry)", () => {
     const output = captureOutput(() =>
-      showOpikStatus({
+      showOpikStatus(makeDeps({
         loadConfig: () => ({ plugin: [OPIK_PLUGIN_ID] }),
-        writeConfig: async () => undefined,
-      }),
+      })),
     )
     expect(output).toContain("(default)")
     expect(output).toContain("API key:    (not set)")
@@ -333,15 +343,61 @@ describe("showOpikStatus", () => {
 
   test("shows workspace default when not set", () => {
     const output = captureOutput(() =>
-      showOpikStatus({
+      showOpikStatus(makeDeps({
         loadConfig: () => ({
           plugin: [[OPIK_PLUGIN_ID, { projectName: "test" }]],
         }),
-        writeConfig: async () => undefined,
-      }),
+      })),
     )
     expect(output).toContain("Workspace:  default")
     expect(output).toContain("Project:    test")
+  })
+
+  test("reads from independent config file when plugin is bare string", () => {
+    const output = captureOutput(() =>
+      showOpikStatus(makeDeps({
+        loadConfig: () => ({ plugin: [OPIK_PLUGIN_ID] }),
+        loadOpikConfig: () => ({
+          apiUrl: "http://localhost:5173/api",
+          projectName: "file-project",
+          workspaceName: "file-ws",
+        }),
+      })),
+    )
+    expect(output).toContain("API URL:    http://localhost:5173/api")
+    expect(output).toContain("Project:    file-project")
+    expect(output).toContain("Workspace:  file-ws")
+  })
+
+  test("tuple options override independent config file values", () => {
+    const output = captureOutput(() =>
+      showOpikStatus(makeDeps({
+        loadConfig: () => ({
+          plugin: [[OPIK_PLUGIN_ID, { projectName: "tuple-wins" }]],
+        }),
+        loadOpikConfig: () => ({
+          projectName: "file-loses",
+          apiUrl: "http://from-file/api",
+        }),
+      })),
+    )
+    expect(output).toContain("Project:    tuple-wins")
+    expect(output).toContain("API URL:    http://from-file/api")
+  })
+
+  test("shows configured status from config file even without plugin entry", () => {
+    const output = captureOutput(() =>
+      showOpikStatus(makeDeps({
+        loadConfig: () => ({ plugin: [] }),
+        loadOpikConfig: () => ({
+          apiUrl: "http://standalone/api",
+          projectName: "standalone",
+        }),
+      })),
+    )
+    expect(output).toContain("API URL:    http://standalone/api")
+    expect(output).toContain("Project:    standalone")
+    expect(output).not.toContain("not configured")
   })
 })
 

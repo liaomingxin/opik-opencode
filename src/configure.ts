@@ -19,8 +19,16 @@ import * as p from "@clack/prompts"
  * Abstracts file I/O so the core logic can be tested without touching disk.
  */
 export type ConfigDeps = {
+  /** Load opencode.json config. */
   loadConfig: () => Record<string, unknown>
+  /** Write opencode.json config. */
   writeConfig: (cfg: Record<string, unknown>) => Promise<void>
+  /** Load independent opik-opencode.json config (returns {} if not found). */
+  loadOpikConfig: () => Record<string, unknown>
+  /** Write independent opik-opencode.json config. */
+  writeOpikConfig: (cfg: Record<string, unknown>) => Promise<void>
+  /** Resolved path of the independent opik config file (for display). */
+  opikConfigPath: string
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -442,24 +450,38 @@ export async function runOpikConfigure(deps: ConfigDeps): Promise<void> {
 
   // Step 6: Build API URL from host and write config
   const apiUrl = buildOpikApiUrl(host)
-  const cfg = deps.loadConfig()
-  const existing = getOpikPluginEntry(cfg).options
 
-  const nextOptions: Record<string, unknown> = {
-    ...existing,
+  // Write Opik-specific options to the independent config file
+  const existingOpikConfig = deps.loadOpikConfig()
+  const nextOpikConfig: Record<string, unknown> = {
+    ...existingOpikConfig,
     apiUrl,
     ...(apiKey ? { apiKey } : {}),
     workspaceName,
     projectName,
   }
+  await deps.writeOpikConfig(nextOpikConfig)
 
-  const nextCfg = setOpikPluginEntry(cfg, nextOptions)
-  await deps.writeConfig(nextCfg)
+  // Ensure the plugin is registered in opencode.json as a bare string
+  // (no tuple — options now live in the independent config file)
+  const cfg = deps.loadConfig()
+  const entry = getOpikPluginEntry(cfg)
+  if (!entry.found) {
+    // Plugin not yet registered — add bare string
+    const nextCfg = setOpikPluginEntry(cfg, {})
+    await deps.writeConfig(nextCfg)
+  } else if (Array.isArray((cfg.plugin as unknown[])?.[entry.index])) {
+    // Plugin is registered as a tuple — migrate to bare string
+    const nextCfg = setOpikPluginEntry(cfg, {})
+    await deps.writeConfig(nextCfg)
+  }
 
   const projectsUrl = buildProjectsUrl(host, workspaceName)
 
   p.note(
     [
+      `Config file: ${deps.opikConfigPath}`,
+      "",
       `API URL:    ${apiUrl}`,
       `Workspace:  ${workspaceName}`,
       `Project:    ${projectName}`,
@@ -476,21 +498,34 @@ export async function runOpikConfigure(deps: ConfigDeps): Promise<void> {
 
 /**
  * Display current Opik configuration status.
+ *
+ * Reads from (in priority order):
+ *   1. opencode.json plugin tuple options (legacy/backward compat)
+ *   2. Independent opik-opencode.json config file
+ *
  * API keys are masked for security.
  */
 export function showOpikStatus(deps: ConfigDeps): void {
   const cfg = deps.loadConfig()
   const entry = getOpikPluginEntry(cfg)
+  const fileConfig = deps.loadOpikConfig()
+  const hasFileConfig = Object.keys(fileConfig).length > 0
 
-  if (!entry.found) {
+  if (!entry.found && !hasFileConfig) {
     console.log(
       "Opik is not configured. Run: npx @liaomx/opik-opencode configure",
     )
     return
   }
 
-  const opik = entry.options
+  // Merge: tuple options (higher priority) > file config
+  const opik = { ...fileConfig, ...entry.options }
+  const source = hasFileConfig
+    ? `Config file: ${deps.opikConfigPath}`
+    : "Config source: opencode.json plugin tuple"
   const lines = [
+    `  ${source}`,
+    "",
     `  API URL:    ${(opik.apiUrl as string) ?? "(default)"}`,
     `  Workspace:  ${(opik.workspaceName as string) ?? "default"}`,
     `  Project:    ${(opik.projectName as string) ?? "opencode"}`,

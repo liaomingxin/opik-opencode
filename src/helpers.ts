@@ -6,32 +6,42 @@ import { type OpikPluginConfig } from "./types.js"
 import { DEFAULTS } from "./constants.js"
 
 /**
- * Resolve plugin config from explicit config + environment variables.
- * Environment variables take precedence over defaults but not explicit config.
+ * Resolve plugin config from explicit config + independent file + environment variables.
+ *
+ * Priority chain (highest → lowest):
+ *   explicit config (createOpikPlugin arg + pluginOptions)
+ *   > independent config file (~/.config/opencode/opik-opencode.json or .opencode/opik-opencode.json)
+ *   > environment variables
+ *   > hardcoded defaults
+ *
+ * @param config     - Merged explicit config (createOpikPlugin arg + pluginOptions from opencode.json tuple).
+ * @param fileConfig - Config loaded from the independent opik-opencode.json file.
  */
 export function resolveConfig(
   config: Partial<OpikPluginConfig> = {},
+  fileConfig: Partial<OpikPluginConfig> = {},
 ): Required<OpikPluginConfig> {
   return {
-    apiKey: config.apiKey ?? process.env.OPIK_API_KEY ?? "",
-    apiUrl: config.apiUrl ?? process.env.OPIK_API_URL ?? "",
+    apiKey: config.apiKey ?? fileConfig.apiKey ?? process.env.OPIK_API_KEY ?? "",
+    apiUrl: config.apiUrl ?? fileConfig.apiUrl ?? process.env.OPIK_API_URL ?? "",
     projectName:
       config.projectName ??
+      fileConfig.projectName ??
       process.env.OPIK_PROJECT_NAME ??
       DEFAULTS.PROJECT_NAME,
     workspaceName:
-      config.workspaceName ?? process.env.OPIK_WORKSPACE_NAME ?? "",
-    flushRetries: config.flushRetries ?? DEFAULTS.FLUSH_RETRIES,
+      config.workspaceName ?? fileConfig.workspaceName ?? process.env.OPIK_WORKSPACE_NAME ?? "",
+    flushRetries: config.flushRetries ?? fileConfig.flushRetries ?? DEFAULTS.FLUSH_RETRIES,
     flushRetryBaseDelay:
-      config.flushRetryBaseDelay ?? DEFAULTS.FLUSH_RETRY_BASE_DELAY,
+      config.flushRetryBaseDelay ?? fileConfig.flushRetryBaseDelay ?? DEFAULTS.FLUSH_RETRY_BASE_DELAY,
     flushRetryMaxDelay:
-      config.flushRetryMaxDelay ?? DEFAULTS.FLUSH_RETRY_MAX_DELAY,
+      config.flushRetryMaxDelay ?? fileConfig.flushRetryMaxDelay ?? DEFAULTS.FLUSH_RETRY_MAX_DELAY,
     traceExpireMinutes:
-      config.traceExpireMinutes ?? DEFAULTS.TRACE_EXPIRE_MINUTES,
+      config.traceExpireMinutes ?? fileConfig.traceExpireMinutes ?? DEFAULTS.TRACE_EXPIRE_MINUTES,
     expireScanInterval:
-      config.expireScanInterval ?? DEFAULTS.EXPIRE_SCAN_INTERVAL,
-    sanitizePayloads: config.sanitizePayloads ?? true,
-    uploadAttachments: config.uploadAttachments ?? false,
+      config.expireScanInterval ?? fileConfig.expireScanInterval ?? DEFAULTS.EXPIRE_SCAN_INTERVAL,
+    sanitizePayloads: config.sanitizePayloads ?? fileConfig.sanitizePayloads ?? true,
+    uploadAttachments: config.uploadAttachments ?? fileConfig.uploadAttachments ?? false,
   }
 }
 

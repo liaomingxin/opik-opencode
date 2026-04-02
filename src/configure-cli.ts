@@ -19,6 +19,11 @@ import { writeFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import { runOpikConfigure, showOpikStatus } from "./configure.js"
 import type { ConfigDeps } from "./configure.js"
+import {
+  findOpikConfigPath,
+  writeOpikConfigFile,
+  resolveOpikConfigWritePath,
+} from "./config-file.js"
 
 // ─── Config File Discovery ──────────────────────────────────────────────────
 
@@ -72,34 +77,58 @@ export async function writeConfigToFile(
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
   const command = args[0]
+  const forceGlobal = args.includes("--global") || args.includes("-g")
 
-  const configPath = findConfigPath(process.cwd())
+  const cwd = process.cwd()
+  const configPath = findConfigPath(cwd)
+
+  // Independent opik config file paths
+  const opikConfigWritePath = resolveOpikConfigWritePath(cwd, forceGlobal)
+  const opikConfigReadPath = findOpikConfigPath(cwd)
 
   const deps: ConfigDeps = {
     loadConfig: () => loadConfigFromFile(configPath),
     writeConfig: (cfg) => writeConfigToFile(configPath, cfg),
+    loadOpikConfig: () => {
+      if (!opikConfigReadPath) return {}
+      try {
+        const raw = readFileSync(opikConfigReadPath, "utf-8")
+        const parsed = JSON.parse(raw)
+        return typeof parsed === "object" && parsed && !Array.isArray(parsed)
+          ? parsed
+          : {}
+      } catch {
+        return {}
+      }
+    },
+    writeOpikConfig: (cfg) => writeOpikConfigFile(opikConfigWritePath, cfg),
+    opikConfigPath: opikConfigReadPath ?? opikConfigWritePath,
   }
 
   switch (command) {
     case "configure":
     case "config":
     case "setup":
-      console.log(`Config file: ${configPath}\n`)
+      console.log(`OpenCode config: ${configPath}`)
+      console.log(`Opik config:    ${opikConfigWritePath}\n`)
       await runOpikConfigure(deps)
       break
 
     case "status":
-      console.log(`Config file: ${configPath}\n`)
+      console.log(`OpenCode config: ${configPath}`)
+      console.log(`Opik config:    ${opikConfigReadPath ?? "(not found)"}\n`)
       showOpikStatus(deps)
       break
 
     default:
       console.log("@liaomx/opik-opencode — Opik trace export for OpenCode\n")
-      console.log("Usage: opik-opencode <command>\n")
+      console.log("Usage: opik-opencode <command> [options]\n")
       console.log("Commands:")
       console.log("  configure  Interactive setup for Opik trace export")
       console.log("  status     Show current Opik configuration")
       console.log("  help       Show this help message")
+      console.log("\nOptions:")
+      console.log("  --global, -g  Write config to ~/.config/opencode/ (user-level)")
       process.exitCode = command && command !== "help" ? 1 : 0
   }
 }

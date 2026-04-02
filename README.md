@@ -7,6 +7,8 @@
 
 安装后，你在 OpenCode 中的**每一次对话**都会自动记录到 Opik 平台——包括 LLM 调用、工具执行、多智能体协作的完整轨迹，无需修改任何代码。
 
+**v0.3.0 新增**: 支持[独立配置文件](#方式-a独立配置文件推荐)（`.opencode/opik-opencode.json` 或 `~/.config/opencode/opik-opencode.json`），`opencode.json` 中只需裸字符串注册，与 oh-my-opencode 等工具完全兼容。
+
 **v0.2.0 新增**: 支持 Thread 聚合，同一会话内的所有 Trace 自动归入同一 Thread；LLM Span 包含模型名称和轮次号，便于快速定位。
 
 ---
@@ -18,6 +20,10 @@
 - [第一步：准备 Opik 账号](#第一步准备-opik-账号)
 - [第二步：安装插件](#第二步安装插件)
 - [第三步：配置插件](#第三步配置插件)
+  - [方式 A：独立配置文件（推荐）](#方式-a独立配置文件推荐)
+  - [方式 B：交互式配置向导](#方式-b交互式配置向导)
+  - [方式 C：环境变量](#方式-c环境变量)
+  - [方式 D：opencode.json 元组写法（兼容旧版）](#方式-dopencodejson-元组写法兼容旧版)
 - [第四步：启动 OpenCode 并使用](#第四步启动-opencode-并使用)
 - [第五步：在 Opik 上查看 Trace 数据](#第五步在-opik-上查看-trace-数据)
 - [Thread 聚合与 Multiagent 架构](#thread-聚合与-multiagent-架构)
@@ -106,9 +112,71 @@ npm install @liaomx/opik-opencode
 
 ## 第三步：配置插件
 
-有两种配置方式，**任选其一**：
+有四种配置方式，**任选其一**。推荐使用方式 A 或 B。
 
-### 方式 A：环境变量（推荐）
+### 方式 A：独立配置文件（推荐）
+
+**v0.3.0 新增**。将 Opik 配置写在独立文件中，`opencode.json` 只保留裸字符串注册。这是**兼容性最好**的方式，与 oh-my-opencode 等工具完全兼容。
+
+**1) 在 `opencode.json` 中注册插件（只写包名，不带配置）：**
+
+```json
+{
+  "plugin": ["@liaomx/opik-opencode"]
+}
+```
+
+**2) 创建独立配置文件（二选一）：**
+
+**项目级**（只对当前项目生效）—— `.opencode/opik-opencode.json`：
+
+```json
+{
+  "apiUrl": "https://www.comet.com/opik/api",
+  "apiKey": "你的 API Key",
+  "workspaceName": "你的 Workspace",
+  "projectName": "my-project"
+}
+```
+
+**用户级**（对所有项目生效）—— `~/.config/opencode/opik-opencode.json`：
+
+```json
+{
+  "apiUrl": "https://www.comet.com/opik/api",
+  "apiKey": "你的 API Key",
+  "workspaceName": "你的 Workspace",
+  "projectName": "opencode"
+}
+```
+
+> 当两个文件同时存在时，**项目级优先**。
+
+### 方式 B：交互式配置向导
+
+运行以下命令，按提示逐步填写即可自动生成独立配置文件：
+
+```bash
+npx @liaomx/opik-opencode configure
+```
+
+向导会自动：
+- 检测本地 Opik 实例
+- 引导你选择部署类型（Cloud / 自建 / 本地）
+- 验证 API Key 和连通性
+- 将配置写入独立配置文件（`.opencode/opik-opencode.json` 或 `~/.config/opencode/opik-opencode.json`）
+- 在 `opencode.json` 中注册插件为裸字符串
+
+可选参数：
+- `--global` / `-g`：强制将配置写入用户级 `~/.config/opencode/opik-opencode.json`
+
+查看当前配置状态：
+
+```bash
+npx @liaomx/opik-opencode status
+```
+
+### 方式 C：环境变量
 
 将以下内容添加到你的 `~/.bashrc`、`~/.zshrc` 或项目的 `.env` 文件中：
 
@@ -125,24 +193,24 @@ export OPIK_WORKSPACE_NAME="你的 Workspace"      # Cloud 用户填写
 export OPIK_PROJECT_NAME="opencode"               # 项目名称，默认 "opencode"
 ```
 
-然后在 `opencode.json` 中添加插件（无需重复写配置）：
+然后在 `opencode.json` 中注册插件：
 
 ```json
 {
-  "plugins": ["@liaomx/opik-opencode"]
+  "plugin": ["@liaomx/opik-opencode"]
 }
 ```
 
-### 方式 B：直接写在 opencode.json 中
+### 方式 D：opencode.json 元组写法（兼容旧版）
 
-将所有配置写在 `opencode.json` 的 plugins 数组里：
+将配置直接写在 `opencode.json` 的 plugin 数组中。这种写法仍然支持，但**可能与 oh-my-opencode 等工具不兼容**：
 
 ```json
 {
-  "plugins": [
+  "plugin": [
     ["@liaomx/opik-opencode", {
       "apiKey": "你的 API Key",
-      "apiUrl": "https://www.comet.com",
+      "apiUrl": "https://www.comet.com/opik/api",
       "workspaceName": "你的 Workspace",
       "projectName": "my-project"
     }]
@@ -324,11 +392,19 @@ opencode
 
 ### 配置优先级
 
-当多处都有配置时，按以下优先级合并：
+当多处都有配置时，按以下优先级合并（从高到低）：
 
 ```
-opencode.json 中的 plugin options  >  环境变量  >  默认值
+createOpikPlugin() 显式参数  >  opencode.json 元组 options  >  独立配置文件  >  环境变量  >  默认值
 ```
+
+| 优先级 | 来源 | 说明 |
+|--------|------|------|
+| 1 (最高) | `createOpikPlugin({ ... })` | 代码中显式传入（编程使用） |
+| 2 | `opencode.json` 元组 options | `["@liaomx/opik-opencode", { ... }]` 中的第二个元素 |
+| 3 | 独立配置文件 | `.opencode/opik-opencode.json` 或 `~/.config/opencode/opik-opencode.json` |
+| 4 | 环境变量 | `OPIK_API_KEY`、`OPIK_API_URL` 等 |
+| 5 (最低) | 默认值 | 内置默认值（如 `projectName: "opencode"`） |
 
 ---
 
@@ -348,19 +424,31 @@ opencode.json 中的 plugin options  >  环境变量  >  默认值
 
 ### 多个项目想分开记录
 
-给不同项目设置不同的 `projectName`：
+给不同项目设置不同的 `projectName`。推荐在各项目目录下创建独立配置文件：
+
+```bash
+# 项目 A
+echo '{"projectName": "project-a"}' > project-a/.opencode/opik-opencode.json
+
+# 项目 B
+echo '{"projectName": "project-b"}' > project-b/.opencode/opik-opencode.json
+```
+
+公共配置（如 `apiKey`、`apiUrl`）可以放在用户级 `~/.config/opencode/opik-opencode.json` 中，项目级文件只覆盖 `projectName`。
+
+在 Opik 仪表盘上会看到独立的项目入口。
+
+### 与 oh-my-opencode 的兼容性
+
+如果你使用 [oh-my-opencode](https://github.com/nicepkg/oh-my-opencode) 管理插件，请确保 `opencode.json` 中的 plugin 数组**只包含裸字符串**：
 
 ```json
 {
-  "plugins": [
-    ["@liaomx/opik-opencode", {
-      "projectName": "project-a"
-    }]
-  ]
+  "plugin": ["@liaomx/opik-opencode", "opencode-agent-tmux"]
 }
 ```
 
-在 Opik 仪表盘上会看到独立的项目入口。
+将 Opik 的具体配置放在独立配置文件中（参见[方式 A](#方式-a独立配置文件推荐)）。oh-my-opencode 的安装器对数组元素调用 `.startsWith()` 判断插件，元组写法 `["pkg", {...}]` 会导致识别失败。
 
 ### 想在现有会话结束后再安装，需要重启 OpenCode 吗？
 

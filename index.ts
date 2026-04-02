@@ -31,6 +31,7 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { OpikService } from "./src/service.js"
 import type { OpikPluginConfig } from "./src/types.js"
+import { loadOpikConfigFile } from "./src/config-file.js"
 
 /**
  * Extract readable text content from an AssistantMessage object.
@@ -95,11 +96,16 @@ function debugLog(direction: "event" | "hook", type: string, payload: unknown): 
 
 export function createOpikPlugin(config?: Partial<OpikPluginConfig>): Plugin {
   return async (_ctx, pluginOptions) => {
-    // Merge: explicit config > opencode.json plugin options > env vars > defaults
+    // Merge: explicit config > opencode.json plugin options > config file > env vars > defaults
     const optionsFromConfig = (pluginOptions ?? {}) as Partial<OpikPluginConfig>
     const mergedConfig = { ...optionsFromConfig, ...config }
+
+    // Load independent config file (project-level or user-level)
+    const projectDir = (_ctx as any)?.directory as string | undefined
+    const fileConfig = loadOpikConfigFile(projectDir)
+
     const service = new OpikService()
-    await service.start(mergedConfig)
+    await service.start(mergedConfig, fileConfig)
 
     if (DEBUG) {
       console.error("[opik-debug] Event timeline logging ENABLED (OPIK_DEBUG=1)")
@@ -334,3 +340,12 @@ export {
   setOpikPluginEntry,
   type ConfigDeps,
 } from "./src/configure.js"
+
+// Re-export config file utilities for programmatic use
+export {
+  findOpikConfigPath,
+  loadOpikConfigFile,
+  writeOpikConfigFile,
+  resolveOpikConfigWritePath,
+  OPIK_CONFIG_FILENAME,
+} from "./src/config-file.js"
