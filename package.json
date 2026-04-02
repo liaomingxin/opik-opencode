@@ -1,6 +1,6 @@
 {
   "name": "@liaomx/opik-opencode",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "OpenCode plugin for Opik observability - traces LLM/Tool/Subagent execution to Opik platform",
   "license": "Apache-2.0",
   "type": "module",

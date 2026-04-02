@@ -115,31 +115,24 @@ function normalizeUrl(url: string): string {
 }
 
 /**
- * Build the Opik API URL from a host.
- * Local hosts use `/api`, cloud/self-hosted use `/opik/api`.
- * Mirrors `buildOpikApiUrl` in the Opik SDK.
+ * Build the Opik API URL from user input.
+ * The user is expected to provide a fully usable API URL, so we just
+ * normalise it (strip trailing slash) and return it as-is.
  */
 export function buildOpikApiUrl(host: string): string {
-  const normalized = host.endsWith("/") ? host.slice(0, -1) : host
-  const isLocal =
-    normalized.includes("localhost") || normalized.includes("127.0.0.1")
-  return `${normalized}${isLocal ? "/api" : "/opik/api"}`
+  return host.endsWith("/") ? host.slice(0, -1) : host
 }
 
 /**
  * Build a browser URL pointing to the projects list in the Opik UI.
- * Cloud/self-hosted: `{host}/opik/{workspace}/projects`
- * Local:             `{host}/{workspace}/projects`
+ * Uses the host URL as-is (no automatic prefix).
  */
 export function buildProjectsUrl(
   host: string,
   workspaceName: string,
 ): string {
   const base = host.endsWith("/") ? host.slice(0, -1) : host
-  const isLocal =
-    base.includes("localhost") || base.includes("127.0.0.1")
-  const prefix = isLocal ? "" : "/opik"
-  return `${base}${prefix}/${encodeURIComponent(workspaceName)}/projects`
+  return `${base}/${encodeURIComponent(workspaceName)}/projects`
 }
 
 function buildApiKeysUrl(host: string): string {
@@ -245,7 +238,7 @@ async function handleLocalDeploymentConfig(): Promise<string> {
  * Mirrors `handleSelfHostedDeploymentConfig` in the Opik SDK.
  */
 async function handleSelfHostedDeploymentConfig(): Promise<string> {
-  return promptAndValidateUrl("https://your-opik-instance.com/")
+  return promptAndValidateUrl("https://your-opik-instance.com/opik/api")
 }
 
 /**
@@ -256,7 +249,7 @@ async function handleSelfHostedDeploymentConfig(): Promise<string> {
 async function promptAndValidateUrl(placeholder: string): Promise<string> {
   for (let attempt = 0; attempt < MAX_URL_RETRIES; attempt++) {
     const urlInput = await p.text({
-      message: "Please enter your Opik instance URL:",
+      message: "Please enter your Opik API URL (used directly, no suffix appended):",
       placeholder,
       validate(value) {
         if (!value || !value.trim())

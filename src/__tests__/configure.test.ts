@@ -182,48 +182,48 @@ describe("setOpikPluginEntry", () => {
 // ─── URL Helpers ────────────────────────────────────────────────────────────
 
 describe("buildOpikApiUrl", () => {
-  test("localhost uses /api path", () => {
+  test("returns URL as-is (trailing slash stripped)", () => {
     expect(buildOpikApiUrl("http://localhost:5173/")).toBe(
-      "http://localhost:5173/api",
+      "http://localhost:5173",
     )
   })
 
-  test("127.0.0.1 uses /api path", () => {
+  test("returns URL as-is when no trailing slash", () => {
     expect(buildOpikApiUrl("http://127.0.0.1:5173")).toBe(
-      "http://127.0.0.1:5173/api",
+      "http://127.0.0.1:5173",
     )
   })
 
-  test("cloud host uses /opik/api path", () => {
-    expect(buildOpikApiUrl("https://www.comet.com/")).toBe(
+  test("cloud host returned as-is", () => {
+    expect(buildOpikApiUrl("https://www.comet.com/opik/api")).toBe(
       "https://www.comet.com/opik/api",
     )
   })
 
-  test("self-hosted uses /opik/api path", () => {
-    expect(buildOpikApiUrl("https://opik.example.com")).toBe(
+  test("self-hosted returned as-is", () => {
+    expect(buildOpikApiUrl("https://opik.example.com/opik/api")).toBe(
       "https://opik.example.com/opik/api",
     )
   })
 })
 
 describe("buildProjectsUrl", () => {
-  test("localhost uses no /opik prefix", () => {
+  test("localhost builds projects URL", () => {
     expect(buildProjectsUrl("http://localhost:5173/", "default")).toBe(
       "http://localhost:5173/default/projects",
     )
   })
 
-  test("cloud uses /opik prefix", () => {
+  test("cloud builds projects URL without extra prefix", () => {
     expect(
       buildProjectsUrl("https://www.comet.com/", "my-workspace"),
-    ).toBe("https://www.comet.com/opik/my-workspace/projects")
+    ).toBe("https://www.comet.com/my-workspace/projects")
   })
 
   test("encodes workspace name", () => {
     expect(
       buildProjectsUrl("https://www.comet.com/", "my workspace"),
-    ).toBe("https://www.comet.com/opik/my%20workspace/projects")
+    ).toBe("https://www.comet.com/my%20workspace/projects")
   })
 })
 
