@@ -365,7 +365,7 @@ export async function runOpikConfigure(deps: ConfigDeps): Promise<void> {
 
   // Step 4: API key + workspace (only for cloud and self-hosted)
   let apiKey: string | undefined
-  let workspaceName: string
+  let workspaceName = ""
 
   if (deployment === "local") {
     workspaceName = "default"
@@ -374,15 +374,21 @@ export async function runOpikConfigure(deps: ConfigDeps): Promise<void> {
     let defaultWorkspaceName: string | undefined
     let apiKeyValidated = false
 
+    // Self-hosted deployments may not require an API key
+    const apiKeyRequired = deployment === "cloud"
+
     while (!apiKeyValidated) {
       for (const line of getApiKeyHelpText(deployment, host)) {
         p.log.info(line)
       }
 
       const keyInput = await p.password({
-        message: "Enter your Opik API key:",
+        message: apiKeyRequired
+          ? "Enter your Opik API key:"
+          : "Enter your Opik API key (press Enter to skip if not required):",
         validate(value) {
-          if (!value || !value.trim()) return "API key is required"
+          if (apiKeyRequired && (!value || !value.trim()))
+            return "API key is required"
         },
       })
 
@@ -391,7 +397,14 @@ export async function runOpikConfigure(deps: ConfigDeps): Promise<void> {
         return
       }
 
-      apiKey = (keyInput as string).trim()
+      apiKey = ((keyInput as string) ?? "").trim()
+
+      if (!apiKey && !apiKeyRequired) {
+        // Self-hosted without API key — skip validation
+        apiKeyValidated = true
+        workspaceName = "default"
+        break
+      }
 
       // Validate by fetching default workspace
       const spinner = p.spinner()
@@ -408,30 +421,32 @@ export async function runOpikConfigure(deps: ConfigDeps): Promise<void> {
       }
     }
 
-    // Ask for workspace name with default from API
-    const workspaceInput = await p.text({
-      message: defaultWorkspaceName
-        ? `Enter your workspace name (press Enter to use: ${defaultWorkspaceName}):`
-        : "Enter your workspace name:",
-      placeholder: defaultWorkspaceName ?? "your-workspace-name",
-      initialValue: defaultWorkspaceName,
-      validate(value) {
-        if ((!value || !value.trim()) && !defaultWorkspaceName) {
-          return "Workspace name is required"
-        }
-      },
-    })
+    // Ask for workspace name (skip if self-hosted without API key — already set to "default")
+    if (!workspaceName) {
+      const workspaceInput = await p.text({
+        message: defaultWorkspaceName
+          ? `Enter your workspace name (press Enter to use: ${defaultWorkspaceName}):`
+          : "Enter your workspace name:",
+        placeholder: defaultWorkspaceName ?? "your-workspace-name",
+        initialValue: defaultWorkspaceName,
+        validate(value) {
+          if ((!value || !value.trim()) && !defaultWorkspaceName) {
+            return "Workspace name is required"
+          }
+        },
+      })
 
-    if (p.isCancel(workspaceInput)) {
-      p.cancel("Setup cancelled.")
-      return
+      if (p.isCancel(workspaceInput)) {
+        p.cancel("Setup cancelled.")
+        return
+      }
+
+      workspaceName = (
+        (workspaceInput as string) ||
+        defaultWorkspaceName ||
+        "default"
+      ).trim()
     }
-
-    workspaceName = (
-      (workspaceInput as string) ||
-      defaultWorkspaceName ||
-      "default"
-    ).trim()
   }
 
   // Step 5: Project name
